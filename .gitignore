@@ -1,0 +1,19 @@
+﻿.venv/
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+
+# env
+.env
+
+# runtime outputs
+logs/*.log
+data/extracted/*
+!data/extracted/.gitkeep
+data/screenshots/*
+!data/screenshots/.gitkeep
+data/traces/*
+!data/traces/.gitkeep
+data/input_pdfs/*
+!data/input_pdfs/.gitkeep
