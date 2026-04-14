@@ -49,13 +49,13 @@ class ValidationResult:
 
 
 @dataclass
-class SubmitResult:
+class SaveResult:
     success: bool
     reference_no: str | None = None
     message: str = ""
     screenshot_path: str | None = None
     trace_path: str | None = None
-    submitted_at: str = field(default_factory=_now_iso)
+    saved_at: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -75,3 +75,4 @@ class ProcessResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+

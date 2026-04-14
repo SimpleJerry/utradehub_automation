@@ -59,16 +59,16 @@ class WorkflowRunner:
                     record_json_path=str(record_json_path),
                 )
 
-            submit_result = self.site_bot.submit_record(record)
+            save_result = self.site_bot.save_record(record)
             return ProcessResult(
                 source_file=pdf_file.name,
-                status="success" if submit_result.success else "failed",
-                message=submit_result.message,
-                reference_no=submit_result.reference_no,
+                status="success" if save_result.success else "failed",
+                message=save_result.message,
+                reference_no=save_result.reference_no,
                 raw_json_path=str(raw_json_path),
                 record_json_path=str(record_json_path),
-                screenshot_path=submit_result.screenshot_path,
-                trace_path=submit_result.trace_path,
+                screenshot_path=save_result.screenshot_path,
+                trace_path=save_result.trace_path,
             )
         except Exception as exc:
             self.logger.exception("Unhandled error while processing %s", pdf_file.name)
@@ -98,3 +98,4 @@ class WorkflowRunner:
             if not file_exists:
                 writer.writeheader()
             writer.writerow(row)
+

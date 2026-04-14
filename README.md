@@ -51,11 +51,11 @@ utradehub_automation/
 - 字段清洗、格式统一、校验规则集中在本层。
 
 3. 网页填报层：`app/site_bot.py`
-- 负责 Playwright 网页动作（登录、打开表单、填写、提交）。
+- 负责 Playwright 网页动作（登录、打开表单、填写、临时保存）。
 - 不承载 PDF 解析规则。
 
 4. 流程编排层：`app/workflow.py`
-- 串联“提取 -> 映射 -> 校验 -> 提交”。
+- 串联“提取 -> 映射 -> 校验 -> 临时保存”。
 - 批量处理、失败记录、不中断下一份。
 
 5. 模型与配置层：`app/models.py` / `app/config.py`
@@ -68,8 +68,8 @@ utradehub_automation/
 PDF -> pdf_reader -> RawPdfData
 RawPdfData -> field_mapper -> FormRecord
 FormRecord -> validate_record -> valid/invalid
-valid -> site_bot -> SubmitResult
-SubmitResult -> workflow -> CSV/JSONL + 日志
+valid -> site_bot -> SaveResult
+SaveResult -> workflow -> CSV/JSONL + 日志
 ```
 
 ## 5. 快速开始
@@ -118,13 +118,13 @@ copy .env.example .env
 ## 7. 后续开发建议（按阶段推进）
 
 1. 阶段1：先做网页流程（无PDF）
-- 用假数据跑通登录、进表单、填写、提交。
+- 用假数据跑通登录、进表单、填写、临时保存。
 
 2. 阶段2：只做 PDF 提取
 - 选 3-5 份代表样本，确定字段来源位置。
 
 3. 阶段3：接通端到端
-- `PDF -> 映射记录 -> 网页提交`。
+- `PDF -> 映射记录 -> 网页临时保存`。
 
 4. 阶段4：强化容错与观测
 - 失败截图、trace、错误归档、结果报表。
@@ -135,3 +135,4 @@ copy .env.example .env
 2. 不要一开始就对所有 PDF 使用 OCR。
 3. 优先使用 Playwright 自动等待，不依赖大量 `sleep()`。
 4. 每份 PDF 都应保留可追溯中间结果。
+

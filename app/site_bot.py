@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import logging
+import re
 
-from playwright.sync_api import Page, TimeoutError, sync_playwright
+from playwright.sync_api import Dialog, Error, Frame, Page, TimeoutError, sync_playwright
 
 from .config import AppConfig
-from .models import FormRecord, SubmitResult
+from .models import FormRecord, SaveResult
 
 
 class SiteBot:
@@ -14,19 +15,36 @@ class SiteBot:
 
     Current status:
     - `login(page)` is implemented from approved codegen flow.
-    - Other steps stay as placeholders and will be completed incrementally.
+    - Form entry/fill/save are merged from codegen with safe defaults.
+    - PDF mapping integration remains incremental via record.extra overrides.
     """
 
     def __init__(self, config: AppConfig, logger: logging.Logger) -> None:
         self.config = config
         self.logger = logger
 
-    def submit_record(self, record: FormRecord) -> SubmitResult:
+    @staticmethod
+    def _extra_text(record: FormRecord, key: str, default: str) -> str:
+        value = record.extra.get(key) if isinstance(record.extra, dict) else None
+        if value is None:
+            return default
+        text = str(value).strip()
+        return text if text else default
+
+    @staticmethod
+    def _main_frame(page: Page) -> Frame:
+        page.wait_for_selector('iframe[name^="mainFrame"]', timeout=15000)
+        frames = [frame for frame in page.frames if frame.name and frame.name.startswith("mainFrame")]
+        if not frames:
+            raise RuntimeError("Could not find mainFrame iframe after opening form page.")
+        return frames[-1]
+
+    def save_record(self, record: FormRecord) -> SaveResult:
         if self.config.dry_run:
-            return SubmitResult(
+            return SaveResult(
                 success=True,
                 reference_no="DRY-RUN",
-                message="dry run: site submission skipped",
+                message="dry run: site save skipped",
             )
 
         try:
@@ -39,10 +57,10 @@ class SiteBot:
                 self.open_form(current_page)
                 self.fill_basic_info(current_page, record)
                 self.upload_files(current_page, record)
-                return self.submit(current_page, record)
+                return self.save(current_page, record)
         except Exception as exc:
             self.logger.exception("Site flow failed for %s", record.source_file)
-            return SubmitResult(success=False, message=f"site_flow_error: {exc}")
+            return SaveResult(success=False, message=f"site_flow_error: {exc}")
 
     def login(self, page: Page) -> Page:
         """Login using SITE_BASE_URL with embedded login form.
@@ -76,29 +94,92 @@ class SiteBot:
         return page
 
     def open_form(self, page: Page) -> None:
-        """Placeholder: navigate to target form page."""
-        if not self.config.site_form_url.strip():
-            self.logger.info("[TODO] SITE_FORM_URL is empty; skipping open_form")
-            return
+        """Open the form page and click the initial 작성 action."""
+        if self.config.site_form_url.strip():
+            page.goto(self.config.site_form_url)
+            page.wait_for_load_state("domcontentloaded")
+            self.logger.info("Form opened by SITE_FORM_URL.")
+        else:
+            page.get_by_role("link", name="구매확인서 통합서비스").click()
+            page.get_by_role("button", name="구매확인서 신청 바로가기").click()
+            page.wait_for_load_state("domcontentloaded")
+            self.logger.info("Form opened from main menu flow.")
 
-        page.goto(self.config.site_form_url)
-        page.wait_for_load_state("domcontentloaded")
+        main_frame = self._main_frame(page)
+        main_frame.get_by_role("button", name="작성").click()
+        self.logger.info("Clicked 작성 button in main frame.")
 
     def fill_basic_info(self, page: Page, record: FormRecord) -> None:
-        """Placeholder: fill form fields from mapped record."""
-        _ = page
-        _ = record
-        self.logger.info("[TODO] fill_basic_info not implemented")
+        """Fill the main form based on merged codegen steps.
+
+        Current implementation keeps codegen defaults and allows overriding
+        values via record.extra for incremental tuning.
+        """
+        receiver_name = self._extra_text(record, "receiver_name", "EKTNET@")
+        material_type_code = self._extra_text(record, "material_type_code", "2AJ")
+        currency_code = self._extra_text(record, "currency_code", "KRW")
+
+        main_frame = self._main_frame(page)
+
+        with page.expect_popup() as receiver_popup_info:
+            main_frame.locator('button[name="rcvCd_b"]').click()
+        receiver_popup = receiver_popup_info.value
+        receiver_popup.get_by_text(receiver_name).first.click()
+        receiver_popup.close()
+
+        main_frame.locator("#splyMtrlTypCd").select_option(material_type_code)
+        try:
+            dialog = page.wait_for_event("dialog", timeout=1000)
+            dialog.dismiss()
+        except TimeoutError:
+            pass
+
+        with page.expect_popup() as currency_popup_info:
+            main_frame.get_by_role("button", name="찾기").nth(3).click()
+        currency_popup = currency_popup_info.value
+        currency_popup.get_by_role("textbox", name="코드 입력").fill(currency_code)
+        currency_popup.get_by_role("button", name="조회").click()
+        currency_popup.get_by_text(currency_code).first.click()
+        currency_popup.close()
+
+        self.logger.info("Filled basic form fields from merged codegen flow.")
 
     def upload_files(self, page: Page, record: FormRecord) -> None:
         """Placeholder: upload attachments from record."""
         _ = page
-        _ = record
-        self.logger.info("[TODO] upload_files not implemented")
+        if record.attachments:
+            self.logger.info("[TODO] upload_files not implemented yet, attachments=%s", record.attachments)
+            return
+        self.logger.info("[TODO] upload_files not implemented yet (no attachments)")
 
-    def submit(self, page: Page, record: FormRecord) -> SubmitResult:
-        """Placeholder: submit form and parse receipt number."""
-        _ = page
+    def save(self, page: Page, record: FormRecord) -> SaveResult:
+        """Run temporary save and return a normalized SaveResult."""
         _ = record
-        self.logger.info("[TODO] submit not implemented")
-        return SubmitResult(success=False, message="submit not implemented yet")
+        dialog_message: str | None = None
+
+        def _capture_dialog(dialog: Dialog) -> None:
+            nonlocal dialog_message
+            dialog_message = dialog.message.strip()
+            try:
+                dialog.dismiss()
+            except Error:
+                self.logger.debug("Dialog already handled before save capture.")
+
+        page.once("dialog", _capture_dialog)
+
+        main_frame = self._main_frame(page)
+        main_frame.get_by_role("button", name="임시저장", exact=True).click()
+        page.wait_for_timeout(1000)
+
+        if dialog_message:
+            is_success = any(token in dialog_message for token in ["저장", "완료", "성공"])
+            reference_match = re.search(r"\d{6,}", dialog_message)
+            reference_no = reference_match.group(0) if reference_match else None
+            message = dialog_message
+        else:
+            is_success = True
+            reference_no = None
+            message = "임시저장 clicked (no dialog captured)."
+
+        self.logger.info("Save result: success=%s, message=%s", is_success, message)
+        return SaveResult(success=is_success, reference_no=reference_no, message=message)
