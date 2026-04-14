@@ -34,7 +34,6 @@ class AppConfig:
     result_jsonl_path: Path
 
     site_base_url: str = ""
-    site_login_url: str = ""
     site_form_url: str = ""
     site_username: str = ""
     site_password: str = ""
@@ -60,7 +59,6 @@ def load_config(project_root: Path | None = None) -> AppConfig:
         result_csv_path=(data_dir / "extracted" / "batch_results.csv"),
         result_jsonl_path=(data_dir / "extracted" / "batch_results.jsonl"),
         site_base_url=os.getenv("SITE_BASE_URL", ""),
-        site_login_url=os.getenv("SITE_LOGIN_URL", ""),
         site_form_url=os.getenv("SITE_FORM_URL", ""),
         site_username=os.getenv("SITE_USERNAME", ""),
         site_password=os.getenv("SITE_PASSWORD", ""),
