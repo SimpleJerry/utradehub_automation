@@ -16,7 +16,7 @@ class SiteBot:
     Current status:
     - `login(page)` is implemented from approved codegen flow.
     - Flow is split into `fill_basic_info` + `select_supplier` + `fill_order_from_pdf` + `save`.
-    - `fill_order_from_pdf` currently stays as an items-loop placeholder.
+    - `fill_order_from_pdf` fills line items in the purchase-item popup.
     """
 
     def __init__(self, config: AppConfig, logger: logging.Logger) -> None:
@@ -229,32 +229,112 @@ class SiteBot:
         )
 
     def fill_order_from_pdf(self, page: Page, record: FormRecord) -> None:
-        """Placeholder: loop through mapped item rows and fill order lines.
-
-        Specific selectors and interaction details will be finalized after codegen validation.
-        """
-        _ = page
+        """Fill purchase-item popup rows from mapped PDF line items."""
         if not isinstance(record.extra, dict):
-            self.logger.info("[TODO] fill_order_from_pdf not implemented yet (record.extra missing)")
+            self.logger.info("fill_order_from_pdf skipped: record.extra missing")
             return
 
-        doc_number = record.extra.get("doc_number")
-        document_date = record.extra.get("document_date")
-        hs_code = record.extra.get("hs_code")
-        line_items = record.extra.get("line_items")
+        doc_number = self._extra_text(record, "doc_number", "")
+        document_date = self._extra_text(record, "document_date", "")
+        hs_code = self._extra_text(record, "hs_code", "")
+        line_items_raw = record.extra.get("line_items")
 
-        item_count = len(line_items) if isinstance(line_items, list) else 0
-        first_item = line_items[0] if item_count > 0 and isinstance(line_items[0], dict) else {}
+        if not isinstance(line_items_raw, list) or not line_items_raw:
+            self.logger.info("fill_order_from_pdf skipped: line_items is empty.")
+            return
+
+        valid_items: list[dict[str, str]] = []
+        for idx, row in enumerate(line_items_raw, start=1):
+            if not isinstance(row, dict):
+                self.logger.warning("fill_order_from_pdf skip row %s: invalid row type.", idx)
+                continue
+
+            description = str(row.get("description") or "").strip()
+            quantity = str(row.get("quantity") or "").strip().replace(",", "")
+            unit_price = str(row.get("unit_price") or "").strip().replace(",", "")
+
+            if not description or not quantity or not unit_price:
+                self.logger.warning(
+                    "fill_order_from_pdf skip row %s: missing description/quantity/unit_price.",
+                    idx,
+                )
+                continue
+
+            valid_items.append(
+                {
+                    "description": description,
+                    "quantity": quantity,
+                    "unit_price": unit_price,
+                }
+            )
+
+        if not valid_items:
+            self.logger.warning("fill_order_from_pdf skipped: no valid line items after normalization.")
+            return
+
+        if not hs_code:
+            self.logger.warning("fill_order_from_pdf: hs_code is empty; popup input will use empty value.")
+
+        main_frame = self._main_frame(page)
+
+        with page.expect_popup(timeout=10000) as items_popup_info:
+            main_frame.get_by_role("button", name="구매물품 목록 등록/수정").click()
+        items_popup = items_popup_info.value
+
+        added_count = 0
+        try:
+            items_popup.wait_for_load_state("domcontentloaded")
+
+            for idx, item in enumerate(valid_items, start=1):
+                items_popup.locator('input[name="hsCd"]').click()
+                items_popup.locator('input[name="hsCd"]').fill(hs_code)
+
+                item_name = f"{item['description']}\n{doc_number}" if doc_number else item["description"]
+                items_popup.get_by_role("textbox", name="품명 입력").click()
+                items_popup.get_by_role("textbox", name="품명 입력").fill(item_name)
+
+                # Site may show a warning dialog while editing item name.
+                items_popup.once("dialog", lambda dialog: dialog.dismiss())
+
+                items_popup.get_by_role("textbox", name="단가 입력").click()
+                items_popup.get_by_role("textbox", name="단가 입력").fill(item["unit_price"])
+
+                items_popup.get_by_role("textbox", name="단위수량 입력").click()
+                items_popup.locator('select[name="basPrcBasQtyCdBas"]').select_option("EA")
+                items_popup.locator("#qtyUntBas").select_option("EA")
+
+                items_popup.get_by_role("textbox", name="수량 입력", exact=True).click()
+                items_popup.get_by_role("textbox", name="수량 입력", exact=True).fill(item["quantity"])
+
+                if document_date:
+                    items_popup.get_by_role("textbox", name="구매일자 입력").click()
+                    items_popup.get_by_role("textbox", name="구매일자 입력").fill(document_date)
+
+                items_popup.locator("#btn_add_save2").click()
+                items_popup.wait_for_timeout(3000)
+                added_count += 1
+
+                self.logger.info(
+                    "fill_order_from_pdf added row %s/%s: %s | qty=%s | unit_price=%s",
+                    idx,
+                    len(valid_items),
+                    item["description"],
+                    item["quantity"],
+                    item["unit_price"],
+                )
+
+            items_popup.get_by_role("button", name="닫기").click()
+        finally:
+            if not items_popup.is_closed():
+                items_popup.close()
 
         self.logger.info(
-            "[TODO] fill_order_from_pdf placeholder | doc_number=%s date=%s hs=%s items=%s first_item=%s/%s/%s",
+            "fill_order_from_pdf completed: added=%s requested=%s hs=%s doc=%s date=%s",
+            added_count,
+            len(valid_items),
+            hs_code,
             doc_number,
             document_date,
-            hs_code,
-            item_count,
-            first_item.get("description"),
-            first_item.get("quantity"),
-            first_item.get("unit_price"),
         )
 
     def save(self, page: Page, record: FormRecord) -> SaveResult:
@@ -288,4 +368,3 @@ class SiteBot:
 
         self.logger.info("Save result: success=%s, message=%s", is_success, message)
         return SaveResult(success=is_success, reference_no=reference_no, message=message)
-
