@@ -189,58 +189,120 @@ class PDFReader:
             if current.lower().startswith("total"):
                 break
 
-            if not re.fullmatch(r"\d+", current):
+            if not self._is_probable_row_start(lines, i):
                 i += 1
                 continue
 
-            if i + 4 >= len(lines):
-                break
-
             no_text = lines[i]
-            description = lines[i + 1]
-            quantity_text = lines[i + 2]
-            unit_price_text = lines[i + 3]
-            amount_text = lines[i + 4]
+            row_no = int(no_text)
+            i += 1
+
+            numeric_start = self._find_numeric_triplet_start(lines, i)
+            if numeric_start is None:
+                self.logger.warning("line item parse skipped at row_no=%s: numeric columns not found", row_no)
+                continue
+
+            description_parts = lines[i:numeric_start]
+            description = " ".join(part.strip() for part in description_parts if part and part.strip()).strip()
+
+            quantity_text = lines[numeric_start]
+            unit_price_text = lines[numeric_start + 1]
+            amount_text = lines[numeric_start + 2]
 
             quantity = self._to_number(quantity_text)
             unit_price = self._to_number(unit_price_text)
             amount = self._to_number(amount_text)
 
             if quantity is None or unit_price is None:
-                i += 1
+                self.logger.warning("line item parse skipped at row_no=%s: quantity/unit_price invalid", row_no)
+                i = numeric_start + 1
                 continue
 
             row: dict[str, Any] = {
-                "no": int(no_text),
+                "no": row_no,
                 "description": description,
                 "quantity": quantity,
                 "unit_price": unit_price,
                 "amount": amount,
             }
 
-            step = 5
-            if i + 5 < len(lines):
-                remarks = self._to_number(lines[i + 5])
-                if remarks is not None:
-                    row["remarks"] = remarks
-                    step = 6
+            i = numeric_start + 3
+
+            # Optional Remarks column: keep numeric value only when it is not the next row number.
+            if i < len(lines):
+                remarks_value = self._to_number(lines[i])
+                if remarks_value is not None and not self._is_probable_row_start(lines, i):
+                    row["remarks"] = remarks_value
+                    i += 1
 
             rows.append(row)
-            i += step
 
         return rows
 
     @staticmethod
+    def _find_numeric_triplet_start(lines: list[str], start_idx: int) -> int | None:
+        for idx in range(start_idx, len(lines) - 2):
+            if lines[idx].lower().startswith("total"):
+                return None
+            if (
+                PDFReader._to_number(lines[idx]) is not None
+                and PDFReader._to_number(lines[idx + 1]) is not None
+                and PDFReader._to_number(lines[idx + 2]) is not None
+            ):
+                return idx
+        return None
+
+    @staticmethod
+    def _is_probable_row_start(lines: list[str], idx: int) -> bool:
+        if idx < 0 or idx >= len(lines):
+            return False
+
+        current = lines[idx].strip()
+        if not re.fullmatch(r"\d+", current):
+            return False
+
+        if int(current) <= 0:
+            return False
+
+        if idx + 1 >= len(lines):
+            return False
+
+        next_line = lines[idx + 1].strip()
+        next_lower = next_line.lower()
+        if not next_line:
+            return False
+        if next_lower.startswith("total"):
+            return False
+        if next_lower in {"description", "quantity", "unit price", "amount", "remarks"}:
+            return False
+
+        # Next row should typically be followed by description text, not another pure number.
+        if PDFReader._to_number(next_line) is not None:
+            return False
+
+        return True
+
+    @staticmethod
     def _find_table_start(lines: list[str]) -> int:
-        for i in range(len(lines) - 5):
+        for i in range(len(lines) - 3):
             is_header = (
                     lines[i] in {"No.", "No"}
                     and lines[i + 1].lower() == "description"
                     and lines[i + 2].lower() == "quantity"
                     and lines[i + 3].lower().replace(" ", "") == "unitprice"
             )
-            if is_header:
-                return i + 6
+            if not is_header:
+                continue
+
+            # Header tail can vary (Amount / Remarks lines may appear in different layouts).
+            search_end = min(len(lines), i + 20)
+            for j in range(i + 1, search_end):
+                if PDFReader._is_probable_row_start(lines, j):
+                    return j
+
+            # Fallback: start right after the known core header block.
+            return i + 4
+
         return -1
 
     @staticmethod
