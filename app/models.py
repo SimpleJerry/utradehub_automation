@@ -46,8 +46,6 @@ class SaveResult:
     success: bool
     reference_no: str | None = None
     message: str = ""
-    screenshot_path: str | None = None
-    trace_path: str | None = None
     saved_at: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:
@@ -62,8 +60,6 @@ class ProcessResult:
     reference_no: str | None = None
     raw_json_path: str | None = None
     record_json_path: str | None = None
-    screenshot_path: str | None = None
-    trace_path: str | None = None
     processed_at: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:

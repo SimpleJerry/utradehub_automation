@@ -11,10 +11,6 @@ __pycache__/
 logs/*.log
 data/extracted/*
 !data/extracted/.gitkeep
-data/screenshots/*
-!data/screenshots/.gitkeep
-data/traces/*
-!data/traces/.gitkeep
 data/input_pdfs/*
 !data/input_pdfs/.gitkeep
 

@@ -11,7 +11,7 @@ def main() -> int:
     config = load_config(project_root=project_root)
     logger = setup_logger(config)
 
-    logger.info("Starting scaffold workflow")
+    logger.info("Starting workflow")
     logger.info("Input directory: %s", config.input_pdf_dir)
     logger.info("Dry run: %s", config.dry_run)
 

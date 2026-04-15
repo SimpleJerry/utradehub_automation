@@ -14,15 +14,12 @@ def _to_bool(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-
 @dataclass
 class AppConfig:
     project_root: Path
 
     input_pdf_dir: Path
     extracted_dir: Path
-    screenshots_dir: Path
-    traces_dir: Path
     logs_dir: Path
 
     result_csv_path: Path
@@ -36,7 +33,6 @@ class AppConfig:
     vendor_mapping_path: Path | None = None
 
     dry_run: bool = True
-
 
 
 def load_config(project_root: Path | None = None) -> AppConfig:
@@ -60,8 +56,6 @@ def load_config(project_root: Path | None = None) -> AppConfig:
         project_root=project_root,
         input_pdf_dir=data_dir / "input_pdfs",
         extracted_dir=data_dir / "extracted",
-        screenshots_dir=data_dir / "screenshots",
-        traces_dir=data_dir / "traces",
         logs_dir=project_root / "logs",
         result_csv_path=(data_dir / "extracted" / "batch_results.csv"),
         result_jsonl_path=(data_dir / "extracted" / "batch_results.jsonl"),
@@ -71,14 +65,11 @@ def load_config(project_root: Path | None = None) -> AppConfig:
         site_password=os.getenv("SITE_PASSWORD", ""),
         vendor_mapping_path=vendor_mapping_path,
         dry_run=_to_bool(os.getenv("DRY_RUN"), True),
-
     )
 
     for d in [
         config.input_pdf_dir,
         config.extracted_dir,
-        config.screenshots_dir,
-        config.traces_dir,
         config.logs_dir,
     ]:
         d.mkdir(parents=True, exist_ok=True)
@@ -108,7 +99,3 @@ def setup_logger(config: AppConfig) -> logging.Logger:
     logger.addHandler(stream)
     logger.addHandler(file_handler)
     return logger
-
-
-
-

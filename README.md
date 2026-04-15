@@ -1,10 +1,10 @@
-﻿# UTradeHub Automation（脚手架版）
+﻿# UTradeHub Automation
 
 一个用于“批量读取 PDF -> 提取字段 -> 映射清洗 -> 自动填报网站表单”的自动化项目。
 
-当前仓库处于**可运行脚手架阶段**：
-- 目录结构、模块边界、主流程编排已就位。
-- 已支持基础 PDF 提取与最小字段映射，网页端仍按占位步骤逐步落地。
+当前仓库处于**可运行版本**：
+- 核心流程（PDF 提取、字段映射、按 Vendor 分组、网页临时保存）已打通。
+- 当前重点是稳定性和维护性优化。
 
 ## 1. 项目目标
 
@@ -24,17 +24,14 @@ utradehub_automation/
 │  ├─ pdf_reader.py           # PDF提取层
 │  ├─ vendor_mapping_loader.py# 外部供应商映射文件加载
 │  ├─ field_mapper.py         # 字段映射层
-│  ├─ site_bot.py             # 网页自动化层（含占位步骤）
-│  ├─ workflow.py             # 主流程编排（已可跑批）
+│  ├─ site_bot.py             # 网页自动化层
+│  ├─ workflow.py             # 主流程编排（按Vendor分组跑批）
 │  └─ __init__.py
 ├─ data/
 │  ├─ input_pdfs/             # 测试/生产PDF输入目录
 │  ├─ extracted/              # 中间结果与汇总结果输出
-│  ├─ local/                  # 本地映射文件目录（默认不提交真实数据）
-│  ├─ screenshots/            # 网页自动化截图输出（后续）
-│  └─ traces/                 # Playwright trace输出（后续）
+│  └─ local/                  # 本地映射文件目录（默认不提交真实数据）
 ├─ logs/                      # 运行日志
-├─ tests/                     # 测试代码（当前为占位）
 ├─ main.py                    # 程序入口
 ├─ requirements.txt           # 依赖清单
 ├─ .env.example               # 环境变量模板
@@ -54,7 +51,7 @@ utradehub_automation/
 
 3. 网页填报层：`app/site_bot.py`
 - 负责 Playwright 网页动作：`login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`。
-- `fill_order_from_pdf` 已按行项目循环填报弹窗字段（支持 item 级 doc/date）。
+- `fill_order_from_pdf` 按行项目循环填报弹窗字段（支持 item 级 doc/date）。
 
 4. 流程编排层：`app/workflow.py`
 - 串联“提取 -> 映射 -> 统一 preflight 校验 -> 按Vendor分组 -> 每组一次临时保存”。
@@ -112,13 +109,13 @@ copy .env.example .env
 - 复制 `data/local/vendor_mapping.example.csv` 为你自己的映射文件。
 - 推荐放在 `data/local/vendor_mapping.csv` 或 `.env` 指向任意本地路径。
 
-4. 运行脚手架
+4. 运行程序
 
 ```powershell
 .\.venv\Scripts\python.exe main.py
 ```
 
-## 7. 测试步骤（当前脚手架）
+## 7. 测试步骤
 
 1. 空目录冒烟测试
 - 不放 PDF，直接运行 `main.py`。

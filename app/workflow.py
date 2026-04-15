@@ -14,7 +14,7 @@ from .site_bot import SiteBot
 
 
 class WorkflowRunner:
-    """Main orchestration layer (scaffold)."""
+    """Main orchestration layer."""
 
     def __init__(self, config: AppConfig, logger: logging.Logger) -> None:
         self.config = config
@@ -107,8 +107,6 @@ class WorkflowRunner:
             status="success" if save_result.success else "failed",
             message=save_result.message,
             reference_no=save_result.reference_no,
-            screenshot_path=save_result.screenshot_path,
-            trace_path=save_result.trace_path,
         )
 
     def _build_group_record(self, group_key: str, records: list[FormRecord]) -> FormRecord:
@@ -176,4 +174,3 @@ class WorkflowRunner:
             if not file_exists:
                 writer.writeheader()
             writer.writerow(row)
-

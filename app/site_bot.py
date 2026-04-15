@@ -13,9 +13,8 @@ from .models import FormRecord, SaveResult
 class SiteBot:
     """Website automation layer.
 
-    Current status:
-    - `login(page)` is implemented from approved codegen flow.
-    - Flow is split into `fill_basic_info` + `select_supplier` + `fill_order_from_pdf` + `save`.
+    Main flow:
+    - `login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`
     - `fill_order_from_pdf` fills line items in the purchase-item popup.
     """
 
@@ -161,7 +160,7 @@ class SiteBot:
         supplier_keyword = self._extra_text(record, "supplier_keyword", supplier_name)
 
         if not supplier_name:
-            self.logger.info("[TODO] select_supplier not executed: supplier_name is missing in record.extra")
+            self.logger.info("select_supplier skipped: supplier_name is missing in record.extra")
             return
 
         main_frame = self._main_frame(page)
@@ -223,7 +222,7 @@ class SiteBot:
                 )
 
         self.logger.warning(
-            "[TODO] select_supplier skipped after retries; supplier=%s keyword=%s",
+            "select_supplier skipped after retries; supplier=%s keyword=%s",
             supplier_name,
             supplier_keyword,
         )
@@ -350,7 +349,6 @@ class SiteBot:
 
     def save(self, page: Page, record: FormRecord) -> SaveResult:
         """Run temporary save and return a normalized SaveResult."""
-        _ = record
         dialog_message: str | None = None
 
         def _capture_dialog(dialog: Dialog) -> None:
@@ -375,7 +373,9 @@ class SiteBot:
         else:
             is_success = True
             reference_no = None
-            message = "임시저장 clicked (no dialog captured)."
+            message = f"임시저장 clicked (no dialog captured). source={record.source_file}"
 
         self.logger.info("Save result: success=%s, message=%s", is_success, message)
         return SaveResult(success=is_success, reference_no=reference_no, message=message)
+
+
