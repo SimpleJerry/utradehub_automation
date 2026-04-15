@@ -15,8 +15,8 @@ class SiteBot:
 
     Current status:
     - `login(page)` is implemented from approved codegen flow.
-    - Flow is split into `fill_basic_info` + `fill_order_from_pdf` + `save`.
-    - `fill_order_from_pdf` is currently a placeholder until selectors are finalized.
+    - Flow is split into `fill_basic_info` + `select_supplier` + `fill_order_from_pdf` + `save`.
+    - `fill_order_from_pdf` currently stays as an items-loop placeholder.
     """
 
     def __init__(self, config: AppConfig, logger: logging.Logger) -> None:
@@ -39,6 +39,20 @@ class SiteBot:
             raise RuntimeError("Could not find mainFrame iframe after opening form page.")
         return frames[-1]
 
+    @staticmethod
+    def _resolve_supplier_button(main_frame: Frame):
+        buttons = main_frame.locator("#splybutton")
+        count = buttons.count()
+        if count == 0:
+            return None
+
+        for idx in range(count):
+            candidate = buttons.nth(idx)
+            if candidate.is_visible():
+                return candidate
+
+        return buttons.first
+
     def save_record(self, record: FormRecord) -> SaveResult:
         if self.config.dry_run:
             return SaveResult(
@@ -56,6 +70,7 @@ class SiteBot:
                 current_page = self.login(page)
                 self.open_form(current_page)
                 self.fill_basic_info(current_page, record)
+                self.select_supplier(current_page, record)
                 self.fill_order_from_pdf(current_page, record)
                 return self.save(current_page, record)
         except Exception as exc:
@@ -110,7 +125,7 @@ class SiteBot:
         self.logger.info("Clicked 작성 button in main frame.")
 
     def fill_basic_info(self, page: Page, record: FormRecord) -> None:
-        """Fill stable default/basic fields that do not depend on PDF line data."""
+        """Fill stable default/basic fields that do not depend on supplier or item rows."""
         receiver_name = self._extra_text(record, "receiver_name", "EKTNET@")
         material_type_code = self._extra_text(record, "material_type_code", "2AJ")
         currency_code = self._extra_text(record, "currency_code", "KRW")
@@ -140,31 +155,106 @@ class SiteBot:
 
         self.logger.info("Filled basic form fields.")
 
-    def fill_order_from_pdf(self, page: Page, record: FormRecord) -> None:
-        """Placeholder: fill order fields from mapped PDF values.
+    def select_supplier(self, page: Page, record: FormRecord) -> None:
+        """Select supplier using mapped vendor name (not hardcoded in code)."""
+        supplier_name = self._extra_text(record, "supplier_name", "")
+        supplier_keyword = self._extra_text(record, "supplier_keyword", supplier_name)
 
-        This method intentionally stays minimal until codegen selectors are finalized.
+        if not supplier_name:
+            self.logger.info("[TODO] select_supplier not executed: supplier_name is missing in record.extra")
+            return
+
+        main_frame = self._main_frame(page)
+        iframe_locator = page.locator('iframe[name^="mainFrame"]').last
+
+        for attempt in range(1, 5):
+            try:
+                # Keep host page iframe and frame content in view before each retry.
+                try:
+                    iframe_locator.scroll_into_view_if_needed(timeout=3000)
+                except Exception:
+                    pass
+
+                if attempt == 1:
+                    page.evaluate("() => window.scrollTo(0, 0)")
+                    main_frame.evaluate("() => window.scrollTo(0, 0)")
+                else:
+                    page.mouse.wheel(0, -900)
+                    main_frame.evaluate("offset => window.scrollBy(0, offset)", -700)
+
+                supplier_button = self._resolve_supplier_button(main_frame)
+                if supplier_button is None:
+                    raise RuntimeError("#splybutton not found")
+
+                supplier_button.scroll_into_view_if_needed(timeout=3000)
+                supplier_button.wait_for(state="visible", timeout=5000)
+
+                with page.expect_popup(timeout=6000) as supplier_popup_info:
+                    try:
+                        supplier_button.click(timeout=4000)
+                    except Exception:
+                        try:
+                            supplier_button.click(timeout=4000, force=True)
+                        except Exception:
+                            main_frame.evaluate(
+                                "() => { const el = document.querySelector('#splybutton'); if (el) el.click(); }"
+                            )
+                supplier_popup = supplier_popup_info.value
+
+                supplier_popup.locator("#searchOptionText1").click()
+                supplier_popup.locator("#searchOptionText1").fill(supplier_keyword)
+                supplier_popup.get_by_role("button", name="조회").click()
+                supplier_popup.get_by_text(supplier_name).first.click()
+                supplier_popup.close()
+
+                self.logger.info("Selected supplier: %s (attempt=%s)", supplier_name, attempt)
+                return
+            except TimeoutError:
+                self.logger.warning(
+                    "select_supplier retry %s/4: popup not opened yet (supplier=%s)",
+                    attempt,
+                    supplier_name,
+                )
+            except Exception as exc:
+                self.logger.warning(
+                    "select_supplier retry %s/4 failed: %s",
+                    attempt,
+                    exc,
+                )
+
+        self.logger.warning(
+            "[TODO] select_supplier skipped after retries; supplier=%s keyword=%s",
+            supplier_name,
+            supplier_keyword,
+        )
+
+    def fill_order_from_pdf(self, page: Page, record: FormRecord) -> None:
+        """Placeholder: loop through mapped item rows and fill order lines.
+
+        Specific selectors and interaction details will be finalized after codegen validation.
         """
         _ = page
         if not isinstance(record.extra, dict):
             self.logger.info("[TODO] fill_order_from_pdf not implemented yet (record.extra missing)")
             return
 
-        line_items = record.extra.get("line_items")
         doc_number = record.extra.get("doc_number")
         document_date = record.extra.get("document_date")
-        item_name = record.extra.get("item_name")
-        item_quantity = record.extra.get("item_quantity")
-        item_unit_price = record.extra.get("item_unit_price")
+        hs_code = record.extra.get("hs_code")
+        line_items = record.extra.get("line_items")
+
+        item_count = len(line_items) if isinstance(line_items, list) else 0
+        first_item = line_items[0] if item_count > 0 and isinstance(line_items[0], dict) else {}
 
         self.logger.info(
-            "[TODO] fill_order_from_pdf not implemented yet | doc_number=%s date=%s items=%s first_item=%s/%s/%s",
+            "[TODO] fill_order_from_pdf placeholder | doc_number=%s date=%s hs=%s items=%s first_item=%s/%s/%s",
             doc_number,
             document_date,
-            len(line_items) if isinstance(line_items, list) else 0,
-            item_name,
-            item_quantity,
-            item_unit_price,
+            hs_code,
+            item_count,
+            first_item.get("description"),
+            first_item.get("quantity"),
+            first_item.get("unit_price"),
         )
 
     def save(self, page: Page, record: FormRecord) -> SaveResult:
@@ -198,3 +288,4 @@ class SiteBot:
 
         self.logger.info("Save result: success=%s, message=%s", is_success, message)
         return SaveResult(success=is_success, reference_no=reference_no, message=message)
+
