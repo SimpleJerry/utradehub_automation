@@ -54,10 +54,10 @@ utradehub_automation/
 
 3. 网页填报层：`app/site_bot.py`
 - 负责 Playwright 网页动作：`login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`。
-- `fill_order_from_pdf` 当前保留为占位方法（仅日志），等待 codegen 后落地具体 selector。
+- `fill_order_from_pdf` 已按行项目循环填报弹窗字段（支持 item 级 doc/date）。
 
 4. 流程编排层：`app/workflow.py`
-- 串联“提取 -> 映射 -> 校验 -> 临时保存”。
+- 串联“提取 -> 映射 -> 校验 -> 按Vendor分组 -> 每组一次临时保存”。
 - 批量处理、失败记录、不中断下一份。
 
 5. 模型与配置层：`app/models.py` / `app/config.py`
@@ -70,7 +70,8 @@ utradehub_automation/
 PDF -> pdf_reader -> RawPdfData
 RawPdfData -> field_mapper(+vendor mapping file) -> FormRecord
 FormRecord -> validate_record -> valid/invalid
-valid -> site_bot -> SaveResult
+valid records -> group by Pay-to Vendor No.
+grouped FormRecord -> site_bot -> SaveResult
 SaveResult -> workflow -> CSV/JSONL + 日志
 ```
 
@@ -129,7 +130,7 @@ copy .env.example .env
 
 3. 再次运行
 - 程序会遍历该目录并输出中间结果。
-- 当前 `fill_order_from_pdf` 仍是占位，日志会提示 TODO。
+- 当前流程为按 `Pay-to Vendor No.` 分组后提交，每个供应商组只提交一次表单。
 
 4. 检查输出
 - 中间文件：`data/extracted/*.raw.json`、`*.record.json`
@@ -143,4 +144,3 @@ copy .env.example .env
 3. 不要一开始就对所有 PDF 使用 OCR。
 4. 优先使用 Playwright 自动等待，不依赖大量 `sleep()`。
 5. 每份 PDF 都应保留可追溯中间结果。
-

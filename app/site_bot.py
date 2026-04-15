@@ -252,6 +252,9 @@ class SiteBot:
             description = str(row.get("description") or "").strip()
             quantity = str(row.get("quantity") or "").strip().replace(",", "")
             unit_price = str(row.get("unit_price") or "").strip().replace(",", "")
+            row_doc_number = str(row.get("doc_number") or doc_number).strip()
+            row_document_date = str(row.get("document_date") or document_date).strip()
+            row_source_file = str(row.get("source_file") or record.source_file).strip()
 
             if not description or not quantity or not unit_price:
                 self.logger.warning(
@@ -265,6 +268,9 @@ class SiteBot:
                     "description": description,
                     "quantity": quantity,
                     "unit_price": unit_price,
+                    "doc_number": row_doc_number,
+                    "document_date": row_document_date,
+                    "source_file": row_source_file,
                 }
             )
 
@@ -289,7 +295,9 @@ class SiteBot:
                 items_popup.locator('input[name="hsCd"]').click()
                 items_popup.locator('input[name="hsCd"]').fill(hs_code)
 
-                item_name = f"{item['description']}\n{doc_number}" if doc_number else item["description"]
+                item_doc_number = str(item.get("doc_number") or "").strip()
+                item_document_date = str(item.get("document_date") or "").strip()
+                item_name = f"{item['description']}\n{item_doc_number}" if item_doc_number else item["description"]
                 items_popup.get_by_role("textbox", name="품명 입력").click()
                 items_popup.get_by_role("textbox", name="품명 입력").fill(item_name)
 
@@ -306,21 +314,24 @@ class SiteBot:
                 items_popup.get_by_role("textbox", name="수량 입력", exact=True).click()
                 items_popup.get_by_role("textbox", name="수량 입력", exact=True).fill(item["quantity"])
 
-                if document_date:
+                if item_document_date:
                     items_popup.get_by_role("textbox", name="구매일자 입력").click()
-                    items_popup.get_by_role("textbox", name="구매일자 입력").fill(document_date)
+                    items_popup.get_by_role("textbox", name="구매일자 입력").fill(item_document_date)
 
                 items_popup.locator("#btn_add_save2").click()
                 items_popup.wait_for_timeout(3000)
                 added_count += 1
 
                 self.logger.info(
-                    "fill_order_from_pdf added row %s/%s: %s | qty=%s | unit_price=%s",
+                    "fill_order_from_pdf added row %s/%s: %s | qty=%s | unit_price=%s | doc=%s | date=%s | source=%s",
                     idx,
                     len(valid_items),
                     item["description"],
                     item["quantity"],
                     item["unit_price"],
+                    item_doc_number,
+                    item_document_date,
+                    item.get("source_file"),
                 )
 
             items_popup.get_by_role("button", name="닫기").click()
