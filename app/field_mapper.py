@@ -1,9 +1,11 @@
 ﻿from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from .models import FormRecord, RawPdfData, ValidationResult
+from .vendor_mapping_loader import load_vendor_mapping, lookup_vendor_info
 
 
 class FieldMapper:
@@ -12,11 +14,15 @@ class FieldMapper:
     Minimal mapper for current purchase-order PDFs:
     - Blanket Purchase Order No.
     - Document Date
+    - Pay-to Vendor No. (English vendor name)
     - Description / Quantity / Unit Price (line items)
+    - Supplier/HS mapping from external CSV file (fixed columns)
     """
 
-    def __init__(self, logger: logging.Logger) -> None:
+    def __init__(self, logger: logging.Logger, vendor_mapping_path: Path | None = None) -> None:
         self.logger = logger
+        self.vendor_mapping_path = vendor_mapping_path
+        self.vendor_mapping = load_vendor_mapping(vendor_mapping_path, logger)
 
     def map_fields(self, raw_data: RawPdfData) -> FormRecord:
         metadata = raw_data.metadata if isinstance(raw_data.metadata, dict) else {}
@@ -24,18 +30,25 @@ class FieldMapper:
 
         bpo_no = self._as_text(metadata.get("blanket_purchase_order_no"))
         document_date = self._as_text(metadata.get("document_date"))
+        pay_to_vendor_name_en = self._as_text(metadata.get("pay_to_vendor_name_en"))
+
+        supplier_name, hs_code = lookup_vendor_info(pay_to_vendor_name_en, self.vendor_mapping)
 
         first_item = line_items[0] if line_items else {}
         first_description = self._as_text(first_item.get("description"))
         first_quantity = self._as_number_text(first_item.get("quantity"))
         first_unit_price = self._as_number_text(first_item.get("unit_price"))
 
-        map_status = "ok" if all([bpo_no, document_date, line_items]) else "partial"
+        map_status = "ok" if all([bpo_no, document_date, pay_to_vendor_name_en, line_items]) else "partial"
 
         extra: dict[str, Any] = {
             "map_status": map_status,
             "blanket_purchase_order_no": bpo_no,
             "document_date": document_date,
+            "pay_to_vendor_name_en": pay_to_vendor_name_en,
+            "supplier_name": supplier_name,
+            "supplier_keyword": supplier_name,
+            "hs_code": hs_code,
             "line_items": line_items,
             # Convenience keys for the current site flow.
             "doc_number": bpo_no,
@@ -45,10 +58,13 @@ class FieldMapper:
         }
 
         self.logger.info(
-            "Mapped record: %s | BPO=%s | date=%s | items=%s",
+            "Mapped record: %s | BPO=%s | date=%s | vendor=%s | supplier=%s | hs=%s | items=%s",
             raw_data.source_file,
             bpo_no,
             document_date,
+            pay_to_vendor_name_en,
+            supplier_name,
+            hs_code,
             len(line_items),
         )
 
@@ -128,3 +144,4 @@ def validate_record(record: FormRecord, required_fields: list[str]) -> Validatio
         )
 
     return ValidationResult(is_valid=True, missing_fields=[], message="ok")
+

@@ -33,10 +33,11 @@ class PDFReader:
 
         bpo_no = self._extract_blanket_purchase_order_no(lines, full_text)
         document_date = self._extract_document_date(full_text)
+        pay_to_vendor_name_en = self._extract_pay_to_vendor_name_en(lines, full_text)
         line_items = self._extract_line_items(lines)
 
         parse_status = "ok" if full_text else "empty_text"
-        if full_text and (not bpo_no or not document_date or not line_items):
+        if full_text and (not bpo_no or not document_date or not pay_to_vendor_name_en or not line_items):
             parse_status = "partial"
 
         metadata: dict[str, Any] = {
@@ -45,10 +46,12 @@ class PDFReader:
             "parse_status": parse_status,
             "blanket_purchase_order_no": bpo_no,
             "document_date": document_date,
+            "pay_to_vendor_name_en": pay_to_vendor_name_en,
             "line_item_count": len(line_items),
             "target_fields_present": {
                 "Blanket Purchase Order No.": bool(bpo_no),
                 "Document Date": bool(document_date),
+                "Pay-to Vendor No.": bool(pay_to_vendor_name_en),
                 "Description": bool(line_items),
                 "Quantity": bool(line_items),
                 "Unit Price": bool(line_items),
@@ -64,10 +67,11 @@ class PDFReader:
             }
 
         self.logger.info(
-            "Parsed PDF: %s | BPO=%s | Date=%s | items=%s",
+            "Parsed PDF: %s | BPO=%s | Date=%s | Vendor=%s | items=%s",
             pdf_path.name,
             bpo_no,
             document_date,
+            pay_to_vendor_name_en,
             len(line_items),
         )
 
@@ -113,6 +117,64 @@ class PDFReader:
             return f"{year:04d}-{month:02d}-{day:02d}"
 
         return None
+
+    def _extract_pay_to_vendor_name_en(self, lines: list[str], text: str) -> str | None:
+        inline = re.search(
+            r"Pay-to\s*Vendor\s*No\.[^\n:]*:\s*([A-Za-z][A-Za-z0-9 .,&()/-]+)",
+            text,
+            re.IGNORECASE,
+        )
+        if inline:
+            return inline.group(1).strip()
+
+        label_idx = next((idx for idx, line in enumerate(lines) if "pay-to vendor no." in line.lower()), -1)
+        if label_idx >= 0:
+            window = lines[label_idx + 1: min(len(lines), label_idx + 30)]
+            for candidate in window:
+                if self._is_probable_vendor_line(candidate):
+                    return candidate.strip()
+
+        # Fallback: vendor is often shown right above "Blanket Purchase Order" title.
+        for idx, line in enumerate(lines):
+            if line.lower().startswith("blanket purchase order"):
+                for back_idx in range(idx - 1, max(idx - 8, -1), -1):
+                    candidate = lines[back_idx]
+                    if self._is_probable_vendor_line(candidate):
+                        return candidate.strip()
+
+        title_fallback = re.search(r"([A-Za-z][A-Za-z .,&()/-]{2,})\s+Blanket\s+Purchase\s+Order", text)
+        if title_fallback:
+            candidate = title_fallback.group(1).strip()
+            if self._is_probable_vendor_line(candidate):
+                return candidate
+
+        return None
+
+    @staticmethod
+    def _is_probable_vendor_line(line: str) -> bool:
+        candidate = line.strip()
+        if not candidate:
+            return False
+        if not re.search(r"[A-Za-z]", candidate):
+            return False
+        if re.search(r"\d", candidate):
+            return False
+        if "#" in candidate or ":" in candidate:
+            return False
+
+        blocked = {
+            "pay-to vendor no.",
+            "account no.",
+            "bank",
+            "purchaser",
+            "blanket purchase order",
+            "document date",
+            "shipment method",
+            "page",
+            "koru pharma",
+        }
+        lowered = candidate.lower()
+        return not any(token in lowered for token in blocked)
 
     def _extract_line_items(self, lines: list[str]) -> list[dict[str, Any]]:
         start_idx = self._find_table_start(lines)

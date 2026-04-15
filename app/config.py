@@ -38,6 +38,8 @@ class AppConfig:
     site_username: str = ""
     site_password: str = ""
 
+    vendor_mapping_path: Path | None = None
+
     dry_run: bool = True
     required_fields: list[str] = field(default_factory=lambda: ["full_name", "id_number", "birth_date", "address"])
 
@@ -49,6 +51,16 @@ def load_config(project_root: Path | None = None) -> AppConfig:
     load_dotenv(project_root / ".env", override=False)
 
     data_dir = project_root / "data"
+
+    vendor_mapping_env = os.getenv("VENDOR_MAPPING_PATH", "").strip()
+    default_vendor_mapping_path = data_dir / "local" / "vendor_mapping.csv"
+    if vendor_mapping_env:
+        vendor_mapping_path = Path(vendor_mapping_env).expanduser()
+        if not vendor_mapping_path.is_absolute():
+            vendor_mapping_path = project_root / vendor_mapping_path
+    else:
+        vendor_mapping_path = default_vendor_mapping_path
+
     config = AppConfig(
         project_root=project_root,
         input_pdf_dir=data_dir / "input_pdfs",
@@ -62,6 +74,7 @@ def load_config(project_root: Path | None = None) -> AppConfig:
         site_form_url=os.getenv("SITE_FORM_URL", ""),
         site_username=os.getenv("SITE_USERNAME", ""),
         site_password=os.getenv("SITE_PASSWORD", ""),
+        vendor_mapping_path=vendor_mapping_path,
         dry_run=_to_bool(os.getenv("DRY_RUN"), True),
         required_fields=_to_list(
             os.getenv("REQUIRED_FIELDS"),
@@ -77,6 +90,10 @@ def load_config(project_root: Path | None = None) -> AppConfig:
         config.logs_dir,
     ]:
         d.mkdir(parents=True, exist_ok=True)
+
+    # Create local mapping directory for the default path.
+    if not vendor_mapping_env:
+        default_vendor_mapping_path.parent.mkdir(parents=True, exist_ok=True)
 
     return config
 

@@ -17,3 +17,7 @@ data/traces/*
 !data/traces/.gitkeep
 data/input_pdfs/*
 !data/input_pdfs/.gitkeep
+
+# local vendor mapping (do not commit private mapping data)
+data/local/vendor_mapping.*
+!data/local/vendor_mapping.example.csv

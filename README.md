@@ -4,7 +4,7 @@
 
 当前仓库处于**可运行脚手架阶段**：
 - 目录结构、模块边界、主流程编排已就位。
-- `pdf_reader`、`field_mapper`、`site_bot` 目前是占位实现（`TODO`），便于按真实样本逐步落地。
+- 已支持基础 PDF 提取与最小字段映射，网页端仍按占位步骤逐步落地。
 
 ## 1. 项目目标
 
@@ -19,24 +19,26 @@
 ```text
 utradehub_automation/
 ├─ app/
-│  ├─ config.py         # 配置加载、目录初始化、日志初始化
-│  ├─ models.py         # 数据模型定义
-│  ├─ pdf_reader.py     # PDF提取层（占位）
-│  ├─ field_mapper.py   # 字段映射层（占位）
-│  ├─ site_bot.py       # 网页自动化层（占位）
-│  ├─ workflow.py       # 主流程编排（已可跑批）
+│  ├─ config.py               # 配置加载、目录初始化、日志初始化
+│  ├─ models.py               # 数据模型定义
+│  ├─ pdf_reader.py           # PDF提取层
+│  ├─ vendor_mapping_loader.py# 外部供应商映射文件加载
+│  ├─ field_mapper.py         # 字段映射层
+│  ├─ site_bot.py             # 网页自动化层（含占位步骤）
+│  ├─ workflow.py             # 主流程编排（已可跑批）
 │  └─ __init__.py
 ├─ data/
-│  ├─ input_pdfs/       # 测试/生产PDF输入目录
-│  ├─ extracted/        # 中间结果与汇总结果输出
-│  ├─ screenshots/      # 网页自动化截图输出（后续）
-│  └─ traces/           # Playwright trace输出（后续）
-├─ logs/                # 运行日志
-├─ tests/               # 测试代码（当前为占位）
-├─ main.py              # 程序入口
-├─ requirements.txt     # 依赖清单
-├─ .env.example         # 环境变量模板
-├─ .env                 # 本地环境配置（不提交）
+│  ├─ input_pdfs/             # 测试/生产PDF输入目录
+│  ├─ extracted/              # 中间结果与汇总结果输出
+│  ├─ local/                  # 本地映射文件目录（默认不提交真实数据）
+│  ├─ screenshots/            # 网页自动化截图输出（后续）
+│  └─ traces/                 # Playwright trace输出（后续）
+├─ logs/                      # 运行日志
+├─ tests/                     # 测试代码（当前为占位）
+├─ main.py                    # 程序入口
+├─ requirements.txt           # 依赖清单
+├─ .env.example               # 环境变量模板
+├─ .env                       # 本地环境配置（不提交）
 └─ .gitignore
 ```
 
@@ -44,15 +46,15 @@ utradehub_automation/
 
 1. 资料提取层：`app/pdf_reader.py`
 - 负责读取 PDF 并返回原始抽取结果。
-- 后续会接入 `pypdf` / `pdfplumber`，OCR 仅作为扫描件兜底。
+- 当前已提取：`Blanket Purchase Order No.`、`Document Date`、`Pay-to Vendor No.`、行项目表格。
 
 2. 字段映射层：`app/field_mapper.py`
 - 负责把原始 PDF 数据映射成标准 `FormRecord`。
-- 字段清洗、格式统一、校验规则集中在本层。
+- 通过外部映射文件把英文供应商名转换为韩文供应商名与 HS Code。
 
 3. 网页填报层：`app/site_bot.py`
-- 负责 Playwright 网页动作（登录、打开表单、基础信息填写、PDF订单字段填写、临时保存）。
-- 不承载 PDF 解析规则。
+- 负责 Playwright 网页动作：`login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`。
+- `fill_order_from_pdf` 当前保留为占位方法（仅日志），等待 codegen 后落地具体 selector。
 
 4. 流程编排层：`app/workflow.py`
 - 串联“提取 -> 映射 -> 校验 -> 临时保存”。
@@ -66,13 +68,27 @@ utradehub_automation/
 
 ```text
 PDF -> pdf_reader -> RawPdfData
-RawPdfData -> field_mapper -> FormRecord
+RawPdfData -> field_mapper(+vendor mapping file) -> FormRecord
 FormRecord -> validate_record -> valid/invalid
 valid -> site_bot -> SaveResult
 SaveResult -> workflow -> CSV/JSONL + 日志
 ```
 
-## 5. 快速开始
+## 5. 外部映射文件（重要）
+
+- 供应商映射不硬编码在 Python 中，而是从外部 `CSV` 文件读取（固定列名）。
+- 环境变量：`VENDOR_MAPPING_PATH`
+- 默认路径（未配置时）：`data/local/vendor_mapping.csv`
+- 示例模板：`data/local/vendor_mapping.example.csv`
+
+CSV 固定列：
+
+```csv
+vendor_name_en,supplier_name_ko,hs_code
+Skin Medience,스킨메디언스,3916909000
+```
+
+## 6. 快速开始
 
 1. 安装依赖
 
@@ -88,15 +104,20 @@ cd F:\utradehub_automation
 copy .env.example .env
 ```
 
-然后按实际情况填写 `.env` 中的网站地址、账号等信息。
+然后按实际情况填写 `.env` 中的网站地址、账号、映射文件路径等信息。
 
-3. 运行脚手架
+3. 准备映射文件
+
+- 复制 `data/local/vendor_mapping.example.csv` 为你自己的映射文件。
+- 推荐放在 `data/local/vendor_mapping.csv` 或 `.env` 指向任意本地路径。
+
+4. 运行脚手架
 
 ```powershell
 .\.venv\Scripts\python.exe main.py
 ```
 
-## 6. 测试步骤（当前脚手架）
+## 7. 测试步骤（当前脚手架）
 
 1. 空目录冒烟测试
 - 不放 PDF，直接运行 `main.py`。
@@ -108,32 +129,18 @@ copy .env.example .env
 
 3. 再次运行
 - 程序会遍历该目录并输出中间结果。
-- 因核心业务规则仍是占位实现，当前结果以流程验证为主。
+- 当前 `fill_order_from_pdf` 仍是占位，日志会提示 TODO。
 
 4. 检查输出
 - 中间文件：`data/extracted/*.raw.json`、`*.record.json`
 - 汇总结果：`data/extracted/batch_results.csv`、`batch_results.jsonl`
 - 运行日志：`logs/run.log`
 
-## 7. 后续开发建议（按阶段推进）
-
-1. 阶段1：先做网页流程（无PDF）
-- 用假数据跑通登录、进表单、基础信息填写、PDF订单字段填写、临时保存。
-
-2. 阶段2：只做 PDF 提取
-- 选 3-5 份代表样本，确定字段来源位置。
-
-3. 阶段3：接通端到端
-- `PDF -> 映射记录 -> 网页临时保存`。
-
-4. 阶段4：强化容错与观测
-- 失败截图、trace、错误归档、结果报表。
-
 ## 8. 注意事项
 
-1. 不要把 PDF 解析规则写进 `site_bot.py`。
-2. 不要一开始就对所有 PDF 使用 OCR。
-3. 优先使用 Playwright 自动等待，不依赖大量 `sleep()`。
-4. 每份 PDF 都应保留可追溯中间结果。
-
+1. 不要把供应商映射和 HS Code 硬编码在 `site_bot.py`。
+2. 供应商映射真实数据应放在本地映射文件，并通过 `.gitignore` 避免入库。
+3. 不要一开始就对所有 PDF 使用 OCR。
+4. 优先使用 Playwright 自动等待，不依赖大量 `sleep()`。
+5. 每份 PDF 都应保留可追溯中间结果。
 

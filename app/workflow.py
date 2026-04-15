@@ -19,7 +19,7 @@ class WorkflowRunner:
         self.config = config
         self.logger = logger
         self.pdf_reader = PDFReader(logger=logger)
-        self.field_mapper = FieldMapper(logger=logger)
+        self.field_mapper = FieldMapper(logger=logger, vendor_mapping_path=config.vendor_mapping_path)
         self.site_bot = SiteBot(config=config, logger=logger)
 
     def run_batch(self) -> list[ProcessResult]:
@@ -98,4 +98,3 @@ class WorkflowRunner:
             if not file_exists:
                 writer.writeheader()
             writer.writerow(row)
-
