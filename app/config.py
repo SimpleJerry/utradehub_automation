@@ -2,7 +2,7 @@
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,11 +13,6 @@ def _to_bool(value: str | None, default: bool = False) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
-
-def _to_list(value: str | None, default: list[str]) -> list[str]:
-    if not value:
-        return default
-    return [x.strip() for x in value.split(",") if x.strip()]
 
 
 @dataclass
@@ -41,7 +36,7 @@ class AppConfig:
     vendor_mapping_path: Path | None = None
 
     dry_run: bool = True
-    required_fields: list[str] = field(default_factory=lambda: ["full_name", "id_number", "birth_date", "address"])
+
 
 
 def load_config(project_root: Path | None = None) -> AppConfig:
@@ -76,10 +71,7 @@ def load_config(project_root: Path | None = None) -> AppConfig:
         site_password=os.getenv("SITE_PASSWORD", ""),
         vendor_mapping_path=vendor_mapping_path,
         dry_run=_to_bool(os.getenv("DRY_RUN"), True),
-        required_fields=_to_list(
-            os.getenv("REQUIRED_FIELDS"),
-            ["full_name", "id_number", "birth_date", "address"],
-        ),
+
     )
 
     for d in [
@@ -116,3 +108,7 @@ def setup_logger(config: AppConfig) -> logging.Logger:
     logger.addHandler(stream)
     logger.addHandler(file_handler)
     return logger
+
+
+
+

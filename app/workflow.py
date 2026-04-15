@@ -70,12 +70,12 @@ class WorkflowRunner:
             record = self.field_mapper.map_fields(raw_data)
             self._write_json(record_json_path, record.to_dict())
 
-            validation = validate_record(record, self.config.required_fields)
+            validation = validate_record(record)
             if not validation.is_valid:
                 return None, ProcessResult(
                     source_file=pdf_file.name,
                     status="failed",
-                    message=f"validation failed: {validation.missing_fields}",
+                    message=f"preflight failed: {validation.missing_fields}",
                     raw_json_path=str(raw_json_path),
                     record_json_path=str(record_json_path),
                 )
@@ -114,10 +114,8 @@ class WorkflowRunner:
     def _build_group_record(self, group_key: str, records: list[FormRecord]) -> FormRecord:
         first = records[0]
         merged_items: list[dict[str, Any]] = []
-        source_files: list[str] = []
 
         for record in records:
-            source_files.append(record.source_file)
             if not isinstance(record.extra, dict):
                 continue
 
@@ -139,8 +137,6 @@ class WorkflowRunner:
         extra = dict(first.extra) if isinstance(first.extra, dict) else {}
         extra["line_items"] = merged_items
         extra["group_key"] = group_key
-        extra["group_source_files"] = source_files
-        extra["group_size"] = len(records)
 
         self.logger.info(
             "Built group record: key=%s files=%s merged_items=%s",
@@ -180,3 +176,4 @@ class WorkflowRunner:
             if not file_exists:
                 writer.writeheader()
             writer.writerow(row)
+

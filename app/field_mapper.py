@@ -34,15 +34,7 @@ class FieldMapper:
 
         supplier_name, hs_code = lookup_vendor_info(pay_to_vendor_name_en, self.vendor_mapping)
 
-        first_item = line_items[0] if line_items else {}
-        first_description = self._as_text(first_item.get("description"))
-        first_quantity = self._as_number_text(first_item.get("quantity"))
-        first_unit_price = self._as_number_text(first_item.get("unit_price"))
-
-        map_status = "ok" if all([bpo_no, document_date, pay_to_vendor_name_en, line_items]) else "partial"
-
         extra: dict[str, Any] = {
-            "map_status": map_status,
             "blanket_purchase_order_no": bpo_no,
             "document_date": document_date,
             "pay_to_vendor_name_en": pay_to_vendor_name_en,
@@ -50,11 +42,8 @@ class FieldMapper:
             "supplier_keyword": supplier_name,
             "hs_code": hs_code,
             "line_items": line_items,
-            # Convenience keys for the current site flow.
+            # Convenience key for the current site flow.
             "doc_number": bpo_no,
-            "item_name": first_description,
-            "item_quantity": first_quantity,
-            "item_unit_price": first_unit_price,
         }
 
         self.logger.info(
@@ -121,27 +110,67 @@ class FieldMapper:
         return text.replace(",", "")
 
 
-def validate_record(record: FormRecord, required_fields: list[str]) -> ValidationResult:
+def validate_record(record: FormRecord) -> ValidationResult:
+    # Unified preflight checks for current site flow.
+    required_fields = ["source_file", "supplier_name", "hs_code", "line_items"]
+
     missing_fields: list[str] = []
-
     for field_name in required_fields:
-        value = getattr(record, field_name, None)
+        if field_name == "line_items":
+            if not _has_valid_line_items(record):
+                missing_fields.append(field_name)
+            continue
 
-        # Allow validating keys stored in record.extra without changing model fields.
-        if (value is None or str(value).strip() == "") and isinstance(record.extra, dict):
-            extra_value = record.extra.get(field_name)
-            if extra_value is not None and str(extra_value).strip() != "":
-                value = extra_value
-
-        if value is None or str(value).strip() == "":
+        value = _get_record_value(record, field_name)
+        if _is_blank(value):
             missing_fields.append(field_name)
 
     if missing_fields:
         return ValidationResult(
             is_valid=False,
             missing_fields=missing_fields,
-            message="required fields missing",
+            message="preflight required fields missing",
         )
 
-    return ValidationResult(is_valid=True, missing_fields=[], message="ok")
+    return ValidationResult(is_valid=True, missing_fields=[], message="preflight ok")
+
+
+def _get_record_value(record: FormRecord, field_name: str) -> Any:
+    value = getattr(record, field_name, None)
+    if not _is_blank(value):
+        return value
+
+    if isinstance(record.extra, dict):
+        return record.extra.get(field_name)
+    return None
+
+
+def _has_valid_line_items(record: FormRecord) -> bool:
+    if not isinstance(record.extra, dict):
+        return False
+
+    line_items = record.extra.get("line_items")
+    if not isinstance(line_items, list):
+        return False
+
+    for row in line_items:
+        if not isinstance(row, dict):
+            continue
+
+        description = str(row.get("description") or "").strip()
+        quantity = str(row.get("quantity") or "").strip()
+        unit_price = str(row.get("unit_price") or "").strip()
+        if description and quantity and unit_price:
+            return True
+
+    return False
+
+
+def _is_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    return str(value).strip() == ""
+
 

@@ -57,7 +57,7 @@ utradehub_automation/
 - `fill_order_from_pdf` 已按行项目循环填报弹窗字段（支持 item 级 doc/date）。
 
 4. 流程编排层：`app/workflow.py`
-- 串联“提取 -> 映射 -> 校验 -> 按Vendor分组 -> 每组一次临时保存”。
+- 串联“提取 -> 映射 -> 统一 preflight 校验 -> 按Vendor分组 -> 每组一次临时保存”。
 - 批量处理、失败记录、不中断下一份。
 
 5. 模型与配置层：`app/models.py` / `app/config.py`
@@ -69,7 +69,7 @@ utradehub_automation/
 ```text
 PDF -> pdf_reader -> RawPdfData
 RawPdfData -> field_mapper(+vendor mapping file) -> FormRecord
-FormRecord -> validate_record -> valid/invalid
+FormRecord -> validate_record (preflight) -> valid/invalid
 valid records -> group by Pay-to Vendor No.
 grouped FormRecord -> site_bot -> SaveResult
 SaveResult -> workflow -> CSV/JSONL + 日志

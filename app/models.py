@@ -24,13 +24,6 @@ class RawPdfData:
 @dataclass
 class FormRecord:
     source_file: str
-    full_name: str | None = None
-    id_number: str | None = None
-    birth_date: str | None = None
-    address: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    attachments: list[str] = field(default_factory=list)
     raw_text: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -75,4 +68,3 @@ class ProcessResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-
