@@ -15,8 +15,8 @@ class SiteBot:
 
     Current status:
     - `login(page)` is implemented from approved codegen flow.
-    - Form entry/fill/save are merged from codegen with safe defaults.
-    - PDF mapping integration remains incremental via record.extra overrides.
+    - Flow is split into `fill_basic_info` + `fill_order_from_pdf` + `save`.
+    - `fill_order_from_pdf` is currently a placeholder until selectors are finalized.
     """
 
     def __init__(self, config: AppConfig, logger: logging.Logger) -> None:
@@ -56,7 +56,7 @@ class SiteBot:
                 current_page = self.login(page)
                 self.open_form(current_page)
                 self.fill_basic_info(current_page, record)
-                self.upload_files(current_page, record)
+                self.fill_order_from_pdf(current_page, record)
                 return self.save(current_page, record)
         except Exception as exc:
             self.logger.exception("Site flow failed for %s", record.source_file)
@@ -110,11 +110,7 @@ class SiteBot:
         self.logger.info("Clicked 작성 button in main frame.")
 
     def fill_basic_info(self, page: Page, record: FormRecord) -> None:
-        """Fill the main form based on merged codegen steps.
-
-        Current implementation keeps codegen defaults and allows overriding
-        values via record.extra for incremental tuning.
-        """
+        """Fill stable default/basic fields that do not depend on PDF line data."""
         receiver_name = self._extra_text(record, "receiver_name", "EKTNET@")
         material_type_code = self._extra_text(record, "material_type_code", "2AJ")
         currency_code = self._extra_text(record, "currency_code", "KRW")
@@ -142,15 +138,34 @@ class SiteBot:
         currency_popup.get_by_text(currency_code).first.click()
         currency_popup.close()
 
-        self.logger.info("Filled basic form fields from merged codegen flow.")
+        self.logger.info("Filled basic form fields.")
 
-    def upload_files(self, page: Page, record: FormRecord) -> None:
-        """Placeholder: upload attachments from record."""
+    def fill_order_from_pdf(self, page: Page, record: FormRecord) -> None:
+        """Placeholder: fill order fields from mapped PDF values.
+
+        This method intentionally stays minimal until codegen selectors are finalized.
+        """
         _ = page
-        if record.attachments:
-            self.logger.info("[TODO] upload_files not implemented yet, attachments=%s", record.attachments)
+        if not isinstance(record.extra, dict):
+            self.logger.info("[TODO] fill_order_from_pdf not implemented yet (record.extra missing)")
             return
-        self.logger.info("[TODO] upload_files not implemented yet (no attachments)")
+
+        line_items = record.extra.get("line_items")
+        doc_number = record.extra.get("doc_number")
+        document_date = record.extra.get("document_date")
+        item_name = record.extra.get("item_name")
+        item_quantity = record.extra.get("item_quantity")
+        item_unit_price = record.extra.get("item_unit_price")
+
+        self.logger.info(
+            "[TODO] fill_order_from_pdf not implemented yet | doc_number=%s date=%s items=%s first_item=%s/%s/%s",
+            doc_number,
+            document_date,
+            len(line_items) if isinstance(line_items, list) else 0,
+            item_name,
+            item_quantity,
+            item_unit_price,
+        )
 
     def save(self, page: Page, record: FormRecord) -> SaveResult:
         """Run temporary save and return a normalized SaveResult."""
