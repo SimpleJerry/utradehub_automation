@@ -180,6 +180,11 @@ cd F:\utradehub_automation
 4. 优先使用 Playwright 自动等待，不依赖大量 `sleep()`。
 5. 每份 PDF 都应保留可追溯中间结果。
 
+## 11. Packaging Checklist (Playwright Browser)
 
-
+1. Run `packaging/build.ps1 -Clean` before compiling installer.
+2. Confirm `packaging/output/UTradeHubDesktop/playwright-browsers/chromium-*` exists.
+3. Compile installer with `packaging/installer.iss`.
+4. After install, confirm `<install_dir>/playwright-browsers/chromium-*` exists.
+5. If logs show `BrowserType.launch: Executable doesn't exist`, installer artifact is incomplete; rebuild from step 1.
 

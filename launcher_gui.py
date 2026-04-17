@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from desktop.gui_main import launch_gui
+from desktop.playwright_runtime import configure_playwright_environment
 
 
 def _install_root() -> Path:
@@ -21,4 +22,6 @@ def _user_data_root() -> Path:
 
 
 if __name__ == "__main__":
-    raise SystemExit(launch_gui(install_root=_install_root(), user_data_root=_user_data_root()))
+    install_root = _install_root()
+    configure_playwright_environment(install_root)
+    raise SystemExit(launch_gui(install_root=install_root, user_data_root=_user_data_root()))

@@ -1,4 +1,4 @@
-﻿# UTradeHub Automation 用户使用说明
+# UTradeHub Automation 用户使用说明
 
 ## 0. 快速流程（1~6）
 1. 安装 `UTradeHubAutomationSetup.exe`。
@@ -48,3 +48,7 @@
 - 检查账号密码、网络、网站是否可访问。
 - 点击“打开日志目录”，将 `logs/run.log` 提供给维护人员。
 
+4. Error: `BrowserType.launch: Executable doesn't exist`
+- This means the installed app is missing bundled Playwright browser files.
+- Rebuild using `packaging/build.ps1 -Clean`, then compile installer with Inno Setup again.
+- After reinstall, confirm `<install_dir>/playwright-browsers/chromium-*` exists.

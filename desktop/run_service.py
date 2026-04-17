@@ -8,6 +8,7 @@ from app.config import AppConfig, setup_logger
 from app.workflow import WorkflowRunner
 
 from .settings import UserSettings, load_settings, resolve_path
+from .playwright_runtime import playwright_runtime_error
 
 
 class UserInputError(Exception):
@@ -58,32 +59,36 @@ def validate_for_run(base_root: Path, settings: UserSettings) -> list[str]:
 
     if not settings.dry_run:
         if not settings.site_base_url.strip():
-            errors.append("缺少网站入口地址。")
+            errors.append("Missing site base URL.")
         if not settings.site_username.strip():
-            errors.append("缺少登录账号。")
+            errors.append("Missing login username.")
         if not settings.site_password.strip():
-            errors.append("缺少登录密码。")
+            errors.append("Missing login password.")
+
+        browser_error = playwright_runtime_error()
+        if browser_error:
+            errors.append(browser_error)
 
     if not settings.vendor_mapping_path.strip():
-        errors.append("缺少供应商映射 CSV 路径。")
+        errors.append("Missing vendor mapping CSV path.")
     else:
         mapping_path = resolve_path(base_root, settings.vendor_mapping_path)
         if not mapping_path.exists():
-            errors.append(f"供应商映射文件不存在：{mapping_path}")
+            errors.append(f"Vendor mapping file not found: {mapping_path}")
 
     input_dir = resolve_path(base_root, settings.input_pdf_dir)
     if not input_dir.exists() or not input_dir.is_dir():
-        errors.append(f"PDF 输入目录不存在：{input_dir}")
+        errors.append(f"PDF input directory not found: {input_dir}")
     else:
         pdf_count = len(list(input_dir.glob("*.pdf")))
         if pdf_count == 0:
-            errors.append(f"输入目录里没有 PDF 文件：{input_dir}")
+            errors.append(f"No PDF files in input directory: {input_dir}")
 
     extracted_dir = resolve_path(base_root, settings.extracted_dir)
     try:
         extracted_dir.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
-        errors.append(f"无法创建输出目录：{extracted_dir} ({exc})")
+        errors.append(f"Cannot create output directory: {extracted_dir} ({exc})")
 
     return errors
 
