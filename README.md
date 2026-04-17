@@ -145,7 +145,7 @@ cd F:\utradehub_automation
 
 2. 检查构建产物目录 `packaging/output/UTradeHubDesktop`，至少包含：
 - `UTradeHubDesktop.exe`
-- `config.user.json`
+- `config.user.json.example`
 - `README_USER.md`
 - `data/local/vendor_mapping.example.csv`
 
@@ -167,7 +167,7 @@ cd F:\utradehub_automation
 - （可选）供应商映射模板 `vendor_mapping.example.csv`
 
 6. 运行时数据位置（重要）
-- 配置文件：安装目录根目录 `config.user.json`
+- Config file: `%LOCALAPPDATA%\UTradeHubAutomation\config.user.json`
 - 日志/输入输出目录默认在：`%LOCALAPPDATA%\UTradeHubAutomation`
 
 

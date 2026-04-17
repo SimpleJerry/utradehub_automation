@@ -23,7 +23,7 @@
 3. 点击“保存设置”。
 
 程序会把用户配置保存到：
-`<安装目录>\\config.user.json`（默认安装通常位于 `%ProgramFiles%\\UTradeHub Automation`）
+`%LOCALAPPDATA%\UTradeHubAutomation\config.user.json`
 
 ## 3. 运行
 1. 点击“开始处理”。

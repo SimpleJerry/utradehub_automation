@@ -6,6 +6,25 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
+def _legacy_install_settings(install_root: Path) -> dict:
+    legacy_path = install_root / "config.user.json"
+    if not legacy_path.exists():
+        return {}
+
+    try:
+        payload = json.loads(legacy_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+
+    if not isinstance(payload, dict):
+        return {}
+
+    allowed = set(UserSettings.__dataclass_fields__.keys())
+    return {k: payload[k] for k in allowed if k in payload}
+
+
+
+
 @dataclass
 class UserSettings:
     site_base_url: str = ""
@@ -56,7 +75,11 @@ def ensure_settings_file(install_root: Path, user_data_root: Path, settings_path
     if settings_path.exists():
         return
 
-    settings_path.write_text(json.dumps(asdict(defaults), ensure_ascii=False, indent=2), encoding="utf-8")
+    merged = asdict(defaults)
+    legacy = _legacy_install_settings(install_root)
+    merged.update(legacy)
+
+    settings_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_settings(user_data_root: Path, settings_path: Path) -> UserSettings:

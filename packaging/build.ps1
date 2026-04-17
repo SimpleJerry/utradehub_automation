@@ -58,7 +58,7 @@ New-Item -ItemType Directory -Force -Path $outputAppDir | Out-Null
 Copy-Item -Path (Join-Path $distAppDir "*") -Destination $outputAppDir -Recurse -Force
 
 Copy-Item -Path (Join-Path $projectRoot "README_USER.md") -Destination (Join-Path $outputAppDir "README_USER.md") -Force
-Copy-Item -Path (Join-Path $projectRoot "config.user.example.json") -Destination (Join-Path $outputAppDir "config.user.json") -Force
+Copy-Item -Path (Join-Path $projectRoot "config.user.example.json") -Destination (Join-Path $outputAppDir "config.user.json.example") -Force
 Copy-Item -Path (Join-Path $projectRoot "resources\duck.ico") -Destination (Join-Path $outputAppDir "duck.ico") -Force
 $mappingTargetDir = Join-Path $outputAppDir "data\local"
 New-Item -ItemType Directory -Force -Path $mappingTargetDir | Out-Null

@@ -272,7 +272,7 @@ class DesktopApp:
 
 def launch_gui(install_root: Path, user_data_root: Path, settings_path: Path | None = None) -> int:
     if settings_path is None:
-        settings_path = install_root / "config.user.json"
+        settings_path = user_data_root / "config.user.json"
 
     root = tk.Tk()
     DesktopApp(root=root, install_root=install_root, user_data_root=user_data_root, settings_path=settings_path)
