@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import shutil
@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 def _legacy_install_settings(install_root: Path) -> dict:
+    """Load legacy settings from install dir for one-time migration."""
     legacy_path = install_root / "config.user.json"
     if not legacy_path.exists():
         return {}
@@ -21,8 +22,6 @@ def _legacy_install_settings(install_root: Path) -> dict:
 
     allowed = set(UserSettings.__dataclass_fields__.keys())
     return {k: payload[k] for k in allowed if k in payload}
-
-
 
 
 @dataclass
@@ -51,6 +50,7 @@ class UserSettings:
 
 
 def _seed_vendor_mapping(install_root: Path, user_data_root: Path) -> None:
+    """Copy vendor mapping template to user data directory on first run."""
     source_example = install_root / "data" / "local" / "vendor_mapping.example.csv"
     if not source_example.exists():
         source_example = install_root / "_internal" / "data" / "local" / "vendor_mapping.example.csv"
@@ -64,6 +64,7 @@ def _seed_vendor_mapping(install_root: Path, user_data_root: Path) -> None:
 
 
 def ensure_settings_file(install_root: Path, user_data_root: Path, settings_path: Path) -> None:
+    """Ensure GUI runtime settings file exists in user-writable directory."""
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
     defaults = UserSettings.defaults(user_data_root)
@@ -76,6 +77,7 @@ def ensure_settings_file(install_root: Path, user_data_root: Path, settings_path
         return
 
     merged = asdict(defaults)
+    # One-time migration: reuse install-root config if user has old package layout.
     legacy = _legacy_install_settings(install_root)
     merged.update(legacy)
 
@@ -83,6 +85,7 @@ def ensure_settings_file(install_root: Path, user_data_root: Path, settings_path
 
 
 def load_settings(user_data_root: Path, settings_path: Path) -> UserSettings:
+    """Load settings with defaults and normalize local filesystem paths."""
     defaults = asdict(UserSettings.defaults(user_data_root))
     payload: dict = {}
 
@@ -117,6 +120,3 @@ def resolve_path(base_root: Path, raw_value: str) -> Path:
     if not path.is_absolute():
         path = base_root / path
     return path.resolve()
-
-
-

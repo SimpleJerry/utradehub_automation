@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import queue
@@ -271,6 +271,7 @@ class DesktopApp:
 
 
 def launch_gui(install_root: Path, user_data_root: Path, settings_path: Path | None = None) -> int:
+    # Keep runtime-writable settings under user data root (not Program Files).
     if settings_path is None:
         settings_path = user_data_root / "config.user.json"
 

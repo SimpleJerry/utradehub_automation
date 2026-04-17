@@ -25,6 +25,10 @@
 程序会把用户配置保存到：
 `%LOCALAPPDATA%\UTradeHubAutomation\config.user.json`
 
+补充：
+- 安装目录内会带有 `config.user.json.example` 模板，仅用于参考。
+- 供应商映射 CSV 可参考 `vendor_mapping.example.csv`，再保存为你自己的映射文件。
+
 ## 3. 运行
 1. 点击“开始处理”。
 2. 程序会在下方日志窗口显示进度。
@@ -38,17 +42,26 @@
 - 日志：`logs/run.log`
 
 ## 5. 常见问题
-1. 提示“供应商映射文件不存在”
+1. 首次打开提示“请先补全设置”
+- 这是正常提示，先补全账号、密码和 CSV 路径后保存即可。
+
+2. 提示“供应商映射文件不存在”
 - 检查 CSV 路径是否正确。
 
-2. 提示“输入目录里没有 PDF 文件”
+3. 提示“输入目录里没有 PDF 文件”
 - 检查目录中是否有 `.pdf` 文件。
 
-3. 网页流程失败
+4. 网页流程失败
 - 检查账号密码、网络、网站是否可访问。
 - 点击“打开日志目录”，将 `logs/run.log` 提供给维护人员。
 
-4. Error: `BrowserType.launch: Executable doesn't exist`
-- This means the installed app is missing bundled Playwright browser files.
-- Rebuild using `packaging/build.ps1 -Clean`, then compile installer with Inno Setup again.
-- After reinstall, confirm `<install_dir>/playwright-browsers/chromium-*` exists.
+5. 报错：`BrowserType.launch: Executable doesn't exist`
+- 这说明已安装程序缺少 Playwright 浏览器文件。
+- 请重新执行 `packaging/build.ps1 -Clean`，再用 Inno Setup 重新编译安装包。
+- 重新安装后，确认 `<install_dir>/playwright-browsers/chromium-*` 存在。
+- 若仍然出现，请卸载旧版并重新安装最新安装包。
+
+## 6. 权限说明
+- 如果安装或升级到 `Program Files`，可能需要管理员权限。
+- 日常运行和保存设置不应再需要管理员权限。
+- 运行时的配置、日志、输入和输出都在 `%LOCALAPPDATA%\UTradeHubAutomation` 目录下。

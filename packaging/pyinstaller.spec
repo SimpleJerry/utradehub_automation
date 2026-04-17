@@ -1,4 +1,4 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
 project_root = Path(SPECPATH).resolve().parent
@@ -12,6 +12,7 @@ a = Analysis(
     pathex=[str(project_root)],
     binaries=[],
     datas=[
+        # Template only. Runtime config is created in user data directory.
         (str(project_root / "config.user.example.json"), "."),
         (str(project_root / "README_USER.md"), "."),
         (str(project_root / "data" / "local" / "vendor_mapping.example.csv"), "data/local"),
@@ -58,8 +59,3 @@ coll = COLLECT(
     upx_exclude=[],
     name="UTradeHubDesktop",
 )
-
-
-
-
-
