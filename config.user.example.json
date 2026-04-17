@@ -1,0 +1,10 @@
+﻿{
+  "site_base_url": "https://www.utradehub.or.kr/",
+  "site_form_url": "",
+  "site_username": "",
+  "site_password": "",
+  "vendor_mapping_path": "data/local/vendor_mapping.csv",
+  "input_pdf_dir": "data/input_pdfs",
+  "extracted_dir": "data/extracted",
+  "dry_run": false
+}

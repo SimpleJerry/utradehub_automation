@@ -4,8 +4,9 @@ __pycache__/
 .idea/
 .vscode/
 
-# env
+# env / user local config
 .env
+config.user.json
 
 # runtime outputs
 logs/*.log
@@ -17,3 +18,8 @@ data/input_pdfs/*
 # local vendor mapping (do not commit private mapping data)
 data/local/vendor_mapping.*
 !data/local/vendor_mapping.example.csv
+
+# build artifacts
+build/
+dist/
+packaging/output/

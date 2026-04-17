@@ -134,10 +134,52 @@ copy .env.example .env
 - 汇总结果：`data/extracted/batch_results.csv`、`batch_results.jsonl`
 - 运行日志：`logs/run.log`
 
-## 8. 注意事项
+## 8. 桌面版打包与交付（1~6）
+
+1. 构建桌面程序
+
+```powershell
+cd F:\utradehub_automation
+.\packaging\build.ps1 -Clean
+```
+
+2. 检查构建产物目录 `packaging/output/UTradeHubDesktop`，至少包含：
+- `UTradeHubDesktop.exe`
+- `config.user.json`
+- `README_USER.md`
+- `data/local/vendor_mapping.example.csv`
+
+3. 生成安装包（Inno Setup）
+- 图标统一使用 `resources/duck.ico`（程序 EXE + 安装包图标）
+- 使用 Inno Setup 打开 `packaging/installer.iss`
+- 点击 Compile
+- 安装包输出到 `packaging/output/`
+
+4. 本机安装并做一次冒烟验证
+- 启动桌面程序
+- 填写并保存配置
+- 准备至少 1 个 PDF，点击“开始处理”
+- 确认日志有运行结果
+
+5. 交付文件给非开发用户
+- `UTradeHubAutomationSetup.exe`
+- `README_USER.md`
+- （可选）供应商映射模板 `vendor_mapping.example.csv`
+
+6. 运行时数据位置（重要）
+- 配置文件：安装目录根目录 `config.user.json`
+- 日志/输入输出目录默认在：`%LOCALAPPDATA%\UTradeHubAutomation`
+
+
+
+## 9. 注意事项
 
 1. 不要把供应商映射和 HS Code 硬编码在 `site_bot.py`。
 2. 供应商映射真实数据应放在本地映射文件，并通过 `.gitignore` 避免入库。
 3. 不要一开始就对所有 PDF 使用 OCR。
 4. 优先使用 Playwright 自动等待，不依赖大量 `sleep()`。
 5. 每份 PDF 都应保留可追溯中间结果。
+
+
+
+
