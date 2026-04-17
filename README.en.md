@@ -17,7 +17,7 @@ Current repository status (runnable):
 
 1. Iterates multiple PDFs from the `input_pdfs` directory.
 2. Extracts key fields: `Blanket Purchase Order No.`, `Document Date`, `Pay-to Vendor No.`, and line items.
-3. Runs preflight validation, then groups by vendor: `n PDFs -> n vendor groups -> n web saves`.
+3. Runs preflight validation, then groups by vendor: `m PDFs -> n vendor groups -> n web saves` (typically `m >= n`).
 4. Main web action chain: `login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`.
 5. Outputs intermediate files, summary CSV/JSONL, and runtime logs.
 

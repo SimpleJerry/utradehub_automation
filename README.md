@@ -17,7 +17,7 @@
 
 1. 支持遍历 `input_pdfs` 目录中的多个 PDF。
 2. 抽取核心字段：`Blanket Purchase Order No.`、`Document Date`、`Pay-to Vendor No.`、行项目。
-3. 经 preflight 校验后按供应商分组：`n 个 PDF -> n 个供应商组 -> n 次网页保存`。
+3. 经 preflight 校验后按供应商分组：`m 个 PDF -> n 个供应商组 -> n 次网页保存`（通常 `m >= n`）。
 4. 网页动作主链路：`login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`。
 5. 输出中间文件、汇总 CSV/JSONL、运行日志。
 

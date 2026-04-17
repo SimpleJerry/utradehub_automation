@@ -17,7 +17,7 @@
 
 1. `input_pdfs` 디렉터리의 여러 PDF를 순회 처리합니다.
 2. 핵심 필드(`Blanket Purchase Order No.`, `Document Date`, `Pay-to Vendor No.`, 품목 행)를 추출합니다.
-3. preflight 검증 후 공급사 기준 그룹 처리: `n개 PDF -> n개 공급사 그룹 -> n회 웹 저장`.
+3. preflight 검증 후 공급사 기준 그룹 처리: `m개 PDF -> n개 공급사 그룹 -> n회 웹 저장`(보통 `m >= n`).
 4. 웹 동작 메인 체인: `login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`.
 5. 중간 산출물, 요약 CSV/JSONL, 실행 로그를 출력합니다.
 
