@@ -1,5 +1,10 @@
 # UTradeHub Automation
 
+## Language / 语言 / 언어
+- 中文（主文档）：[README.md](./README.md)
+- English: [README.en.md](./README.en.md)
+- 한국어: [README.ko.md](./README.ko.md)
+
 一个用于“批量读取 PDF -> 提取字段 -> 映射清洗 -> 自动填报网站表单”的自动化项目。
 
 当前仓库是可运行版本，已经打通：

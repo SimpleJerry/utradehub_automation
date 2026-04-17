@@ -1,5 +1,10 @@
 # UTradeHub Automation 用户使用说明
 
+## Language / 语言 / 언어
+- 中文（主文档）：[README_USER.md](./README_USER.md)
+- English: [README_USER.en.md](./README_USER.en.md)
+- 한국어: [README_USER.ko.md](./README_USER.ko.md)
+
 ## 0. 快速流程（1~6）
 1. 安装 `UTradeHubAutomationSetup.exe`。
 2. 打开桌面程序并填写运行设置。
