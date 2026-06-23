@@ -62,6 +62,30 @@ export class PlaywrightDriver implements BrowserDriver {
     return frame;
   }
 
+  /**
+   * Trigger a control that opens a popup window and return the popup.
+   * Dispatches the click event directly (`dispatchEvent("click")`) instead of `Locator.click()`:
+   * the supplier 찾기 button renders outside the form frame's (non-scrollable) viewport, so a
+   * normal click can never reach it (actionability/viewport timeout). Dispatching the event fires
+   * the element's own onclick regardless of position. The popup is captured with a passive
+   * `page.once("popup")` listener armed before the dispatch (a pending `page.waitForEvent` would
+   * interfere with dispatch on this page); we then await the popup, which opens asynchronously.
+   */
+  private dispatchAndAwaitPopup(page: Page, target: Locator, timeoutMs = 30000): Promise<Page> {
+    const popupPromise = new Promise<Page>((resolve, reject) => {
+      const onPopup = (popup: Page): void => {
+        clearTimeout(timer);
+        resolve(popup);
+      };
+      const timer = setTimeout(() => {
+        page.off("popup", onPopup);
+        reject(new Error(`popup did not open within ${timeoutMs}ms`));
+      }, timeoutMs);
+      page.once("popup", onPopup);
+    });
+    return target.dispatchEvent("click").then(() => popupPromise);
+  }
+
   private async login(page: Page, credentials: SiteCredentials): Promise<void> {
     await page.goto(credentials.baseUrl);
     await page.getByPlaceholder(siteContract.login.idPlaceholder).fill(credentials.username);
@@ -113,10 +137,10 @@ export class PlaywrightDriver implements BrowserDriver {
   private async selectSupplier(page: Page, plan: SubmissionPlan): Promise<void> {
     if (!plan.supplierKeyword) return;
     const frame = await this.mainFrame(page);
-    const [popup] = await Promise.all([
-      page.waitForEvent("popup"),
-      frame.locator(siteContract.supplier.button).first().click(),
-    ]);
+    const popup = await this.dispatchAndAwaitPopup(
+      page,
+      frame.locator(siteContract.supplier.button).first(),
+    );
     await popup.locator(siteContract.supplier.searchInput).fill(plan.supplierKeyword);
     await this.role(popup, siteContract.supplier.searchButton).click();
     await popup.getByText(plan.supplierKeyword).first().click();
