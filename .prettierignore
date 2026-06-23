@@ -1,0 +1,32 @@
+# deps & build artifacts
+node_modules/
+coverage/
+dist/
+build/
+.venv/
+__pycache__/
+playwright-browsers/
+
+# legacy python project (superseded; managed separately)
+app/
+desktop/
+packaging/
+data/
+logs/
+resources/
+*.py
+requirements.txt
+config.user.json
+config.user.example.json
+.env.example
+
+# docs / config managed outside prettier
+openspec/
+.claude/
+.idea/
+README.md
+README.en.md
+README.ko.md
+README_USER.md
+README_USER.en.md
+README_USER.ko.md

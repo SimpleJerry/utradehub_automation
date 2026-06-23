@@ -24,3 +24,7 @@ build/
 dist/
 packaging/output/
 playwright-browsers/
+
+# node / typescript rewrite
+node_modules/
+coverage/

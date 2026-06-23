@@ -165,3 +165,24 @@ cd F:\utradehub_automation
 2. 真实映射数据放在本地 CSV，不要提交到仓库。
 3. 优先使用 Playwright 自动等待，减少硬编码 sleep。
 4. 保留 `*.raw.json` 与 `*.record.json` 便于排障追溯。
+
+## 11. 开发（TypeScript 重写）
+
+> 仓库正在迁移到 **TypeScript 全栈本地 Web 应用**（背景见 `docs/ARCHITECTURE.md` 与 `openspec/changes/`）。
+> 过渡期内，上面 1–10 节描述的旧 Python 工具仍保留；新工程位于仓库根的 `src/`、`test/`。
+
+环境：Node ≥ 24、npm（开发机未装 pnpm）。
+
+```powershell
+npm install          # 安装开发依赖
+npm run verify       # typecheck + lint + format:check + test（唯一健康判据）
+npm test             # 仅跑测试
+npm run format       # 用 Prettier 自动格式化
+```
+
+工程布局：
+- `src/core/` 纯领域逻辑（无 I/O，全单元测试）
+- `src/ports/` 外部依赖接口；`src/adapters/` 其实现；`src/app/` 组装根
+- `test/` 单元测试与 `test/fixtures/` golden-file 夹具
+
+CI（`.github/workflows/ci.yml`）在每次 push/PR 跑 `npm run verify`。"失败即拦截合并"需在 GitHub 仓库手动开启分支保护，详见 `docs/ARCHITECTURE.md`。
