@@ -23,10 +23,17 @@
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.1.8",
+    "pdf-lib": "^1.17.1",
     "prettier": "^3.8.4",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.0",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.51",
+    "ai": "^6.0.208",
+    "unpdf": "^1.6.2",
+    "zod": "^4.4.3"
   }
 }
