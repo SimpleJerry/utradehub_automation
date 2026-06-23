@@ -5,163 +5,86 @@
 - English (current): [README.en.md](./README.en.md)
 - 한국어: [README.ko.md](./README.ko.md)
 
-An automation project for “batch PDF ingestion -> field extraction -> mapping/normalization -> automatic web form filling”.
+A local tool that turns **purchase-order PDFs → extracted fields → mapping/cleanup → grouping by supplier → a 구매확인서 임시저장 (temporary-save) draft driven on the uTradeHub website**.
 
-Current repository status (runnable):
-- PDF parsing and key field extraction are implemented.
-- Vendor and HS Code mapping are externalized in CSV.
-- Records are grouped by `Pay-to Vendor No.` and saved through one web flow per group.
-- GUI desktop entry, logs, and batch result outputs are connected.
+**Human gate (hard rule):** the tool only creates **임시저장 drafts** — it never clicks the final 발급/제출. Final issuance is done manually by a person after reviewing on uTradeHub. It is a *draft generator*, not an autonomous filer.
 
-## 1. Scope (Current Version)
+Stack: a **TypeScript full-stack local web app** (Fastify backend + React/Vite UI), driving the operator's **system Chrome** with Playwright (`channel:"chrome"`, no bundled Chromium). See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) and `openspec/` (specs and change history) for background.
 
-1. Iterates multiple PDFs from the `input_pdfs` directory.
-2. Extracts key fields: `Blanket Purchase Order No.`, `Document Date`, `Pay-to Vendor No.`, and line items.
-3. Runs preflight validation, then groups by vendor: `m PDFs -> n vendor groups -> n web saves` (typically `m >= n`).
-4. Main web action chain: `login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`.
-5. Outputs intermediate files, summary CSV/JSONL, and runtime logs.
+## 1. Scope
 
-## 2. Directory Structure
+1. Batch-ingest multiple purchase-order PDFs.
+2. LLM-based structured extraction (vendor-agnostic, OpenAI-compatible) of core fields: `Blanket Purchase Order No.`, `Document Date`, `Pay-to Vendor No.`, line items — validated by a zod schema.
+3. Supplier and HS-Code mapping via an external CSV.
+4. Group by `Pay-to Vendor No.`: `m PDFs → n supplier groups` (typically `m ≥ n`).
+5. After preflight validation, show a **dry-run preview** (what each group will fill + validation results).
+6. After human confirmation, drive each group on the site through `login → open_form → fill_basic_info → select_supplier → fill_line_items → 임시저장`, then output a result report.
+7. Credentials are **in-memory only**: entered per session in the UI, held only in memory for that run, never written to disk or logs.
+
+## 2. Layout
 
 ```text
 utradehub_automation/
-├─ app/
-│  ├─ config.py
-│  ├─ models.py
-│  ├─ pdf_reader.py
-│  ├─ vendor_mapping_loader.py
-│  ├─ field_mapper.py
-│  ├─ site_bot.py
-│  ├─ workflow.py
-│  └─ __init__.py
-├─ desktop/                  # GUI-related modules
-├─ data/
-│  ├─ input_pdfs/            # PDF input directory
-│  ├─ extracted/             # intermediate & summary outputs
-│  └─ local/                 # local mapping files
-├─ packaging/                # packaging scripts and installer script
-├─ resources/                # icons and resources
-├─ launcher_gui.py           # GUI entry (dev environment)
-├─ main.py                   # CLI entry (dev/debug)
-├─ README_USER.md            # end-user guide
+├─ src/
+│  ├─ core/        # pure domain logic (model/mapping/grouping/validation/submission-plan), no I/O, fully unit-tested
+│  ├─ ports/       # interfaces for external deps (LLM provider, browser driver, PDF-to-text, Extractor)
+│  ├─ adapters/    # port implementations (LLM extraction, unpdf, Playwright driver, site contract, drift detection)
+│  └─ app/         # composition root: DTOs, orchestration, environment check, Fastify server
+├─ web/            # React + Vite frontend (config / dry-run preview / credentials + run / report)
+├─ test/           # unit tests and test/fixtures/ golden-file fixtures
+├─ examples/       # vendor_mapping.example.csv and other templates
+├─ docs/           # ARCHITECTURE.md
+├─ openspec/       # specs (specs/) and change history (changes/archive/)
 ├─ .env.example
-└─ config.user.example.json
+└─ run.bat         # one-click launch (= npm run start)
 ```
 
-## 3. Module Responsibilities
+## 3. Supplier mapping CSV (fixed columns)
 
-1. `app/pdf_reader.py`
-- Parses PDF text and extracts metadata + line items.
-
-2. `app/field_mapper.py`
-- Maps `RawPdfData` to `FormRecord`.
-- Resolves Korean supplier name and HS Code from external CSV.
-- Executes unified preflight validation (`source_file/supplier_name/hs_code/line_items`).
-
-3. `app/workflow.py`
-- Batch-processes PDFs.
-- Groups by vendor and builds group records.
-- Executes one web save per group and records results.
-
-4. `app/site_bot.py`
-- Encapsulates web actions, including supplier selection and item-row filling.
-
-5. `desktop/*`
-- GUI settings load/save, run validation, log streaming, and batch trigger.
-
-## 4. Data Flow
-
-```text
-PDF -> pdf_reader -> RawPdfData
-RawPdfData -> field_mapper(+vendor mapping CSV) -> FormRecord
-FormRecord -> validate_record(preflight) -> valid/invalid
-valid records -> group by Pay-to Vendor No.
-grouped records -> site_bot.save_record -> SaveResult
-SaveResult -> workflow -> batch_results.csv/jsonl + logs
-```
-
-## 5. Vendor Mapping CSV (Fixed Columns)
-
-- Use `VENDOR_MAPPING_PATH` to point to your CSV file.
-- If unset, default path is `data/local/vendor_mapping.csv`.
-- Template: `data/local/vendor_mapping.example.csv`
-
-Required CSV columns:
+Pick a CSV in the UI as the supplier mapping. Column names must be exactly:
 
 ```csv
 vendor_name_en,supplier_name_ko,hs_code
 Skin Medience,스킨메디언스,3916909000
 ```
 
-## 6. Run in Development (CLI / GUI)
+See the template at [`examples/vendor_mapping.example.csv`](./examples/vendor_mapping.example.csv); copy it into your own mapping file and **never commit private mapping data**.
 
-1. Install dependencies
+## 4. Run / delivery (for a non-technical operator)
 
-```powershell
-cd F:\utradehub_automation
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m playwright install chromium
-```
+1. One-time setup: `npm install && npm run build`.
+2. Double-click `run.bat` (equivalent to `npm run start`) — it starts the local service and opens the browser.
+3. In the UI: provide the LLM config (optional) and the supplier-mapping CSV, select PDFs → "dry-run preview" → review each group → enter this session's login id/password (**memory only, not saved**) → tick to confirm → "confirm and run" → see the result report.
+4. The tool only reaches 임시저장 drafts; review on uTradeHub and have a person do the final 발급.
 
-2. Configure `.env` (for CLI debugging)
+**Prerequisites:** Chrome installed on the operator's system; LLM configured (`.env`: `LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`); mapping CSV ready. The UI / `checkEnvironment()` summarizes blockers before a run.
 
-```powershell
-copy .env.example .env
-```
+## 5. Development
 
-3. Start GUI (recommended)
+Environment: Node ≥ 24, npm (pnpm not installed on the dev machine).
 
 ```powershell
-.\.venv\Scripts\python.exe launcher_gui.py
+npm install          # install deps
+npm run dev          # dev mode: Vite frontend + Fastify backend in parallel
+npm run verify       # typecheck + lint + format:check + test (the single health gate)
+npm test             # tests only
+npm run format       # auto-format with Prettier
 ```
 
-4. Start CLI (dev/debug)
+Conventions (see `docs/ARCHITECTURE.md`):
+- functional-core / imperative-shell layering; all external deps (LLM, browser, filesystem, clock) accessed only through ports, so the core is unit-tested with zero I/O.
+- Credentials/secrets are never committed; only a secret-free `.env.example` is checked in.
+- golden-file fixtures drive deterministic tests.
+
+CI (`.github/workflows/ci.yml`) runs `npm run verify` on every push/PR. "Block merge on failure" requires enabling branch protection in the GitHub repo settings.
+
+## 6. Site integration test (gated)
+
+The integration test that drives the real uTradeHub site to a draft is skipped by default and runs only when explicitly enabled:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py
+$env:SITE_E2E = "1"   # plus .env's SITE_BASE_URL / SITE_USERNAME / SITE_PASSWORD (dev machine only, never committed)
+npm test
 ```
 
-## 7. Desktop Packaging and Delivery
-
-1. Build desktop artifacts
-
-```powershell
-cd F:\utradehub_automation
-.\packaging\build.ps1 -Clean
-```
-
-2. Verify `packaging/output/UTradeHubDesktop` contains at least:
-- `UTradeHubDesktop.exe`
-- `README_USER.md`
-- `config.user.json.example`
-- `data/local/vendor_mapping.example.csv`
-- `playwright-browsers/chromium-*`
-
-3. Open `packaging/installer.iss` in Inno Setup and compile.
-4. Deliver `UTradeHubAutomationSetup.exe` with `README_USER.md`.
-
-## 8. GUI Runtime Paths (Important)
-
-- Runtime config: `%LOCALAPPDATA%\UTradeHubAutomation\config.user.json`
-- Default input dir: `%LOCALAPPDATA%\UTradeHubAutomation\data\input_pdfs`
-- Default output dir: `%LOCALAPPDATA%\UTradeHubAutomation\data\extracted`
-- Runtime logs: `%LOCALAPPDATA%\UTradeHubAutomation\logs`
-
-Notes:
-- Installer ships template `config.user.json.example` only.
-- On first GUI start, runtime config is auto-created.
-- If legacy `<install_dir>/config.user.json` is found, one-time migration is applied.
-
-## 9. Packaging Check (Playwright Browser)
-
-1. Run `packaging/build.ps1 -Clean` before compiling installer.
-2. Ensure `playwright-browsers/chromium-*` exists in output.
-3. If you see `BrowserType.launch: Executable doesn't exist` after install, browser files were not packaged/copied correctly.
-4. Fix path: rebuild (`build.ps1 -Clean`) -> recompile installer -> uninstall old version -> reinstall.
-
-## 10. Maintenance Notes
-
-1. Do not hardcode supplier/HS mapping in `site_bot.py`.
-2. Keep real mapping data in local CSV, not in repository.
-3. Prefer Playwright auto-wait over hardcoded sleeps.
-4. Keep `*.raw.json` and `*.record.json` for traceable troubleshooting.
+By default `npm run verify` is zero-browser, zero-network.

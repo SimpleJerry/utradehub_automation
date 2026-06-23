@@ -13,7 +13,7 @@ export const SITE_DEFAULTS = {
 /**
  * The single declarative source of uTradeHub's DOM contract.
  * All selectors/roles/labels live here; flow code references keys, never raw selectors.
- * Values ported from the legacy app/site_bot.py.
+ * Values come from manual inspection of the uTradeHub web form.
  */
 export const siteContract = {
   login: {

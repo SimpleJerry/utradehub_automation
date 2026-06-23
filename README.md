@@ -5,194 +5,86 @@
 - English: [README.en.md](./README.en.md)
 - 한국어: [README.ko.md](./README.ko.md)
 
-一个用于“批量读取 PDF -> 提取字段 -> 映射清洗 -> 自动填报网站表单”的自动化项目。
+一个把 **采购订单 PDF → 提取字段 → 映射清洗 → 按供应商分组 → 在 uTradeHub 网站驱动出 구매확인서 임시저장（临时保存）草稿** 的本地工具。
 
-当前仓库是可运行版本，已经打通：
-- PDF 解析与字段抽取。
-- 供应商映射与 HS Code 映射（CSV 外置）。
-- 按 `Pay-to Vendor No.` 分组后，执行网页临时保存。
-- GUI 桌面入口、日志输出、批处理结果汇总。
+**人工闸（硬约束）**：本工具只创建 **임시저장 草稿**，绝不点正式 발급/제출；最终签发由人在 uTradeHub 上复核后手动完成。它是“草稿生成器”，不是“自动申报器”。
 
-## 1. 功能边界（当前版本）
+技术形态：**TypeScript 全栈本地 Web 应用**（Fastify 后端 + React/Vite 界面），用 **Playwright 驱动操作员系统里的 Chrome**（`channel:"chrome"`，不捆 Chromium）。架构背景见 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) 与 `openspec/`（规格与变更历史）。
 
-1. 支持遍历 `input_pdfs` 目录中的多个 PDF。
-2. 抽取核心字段：`Blanket Purchase Order No.`、`Document Date`、`Pay-to Vendor No.`、行项目。
-3. 经 preflight 校验后按供应商分组：`m 个 PDF -> n 个供应商组 -> n 次网页保存`（通常 `m >= n`）。
-4. 网页动作主链路：`login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`。
-5. 输出中间文件、汇总 CSV/JSONL、运行日志。
+## 1. 功能边界
+
+1. 批量摄入多个采购订单 PDF。
+2. 经 LLM（厂商无关，OpenAI 兼容）结构化抽取核心字段：`Blanket Purchase Order No.`、`Document Date`、`Pay-to Vendor No.`、行项目，并以 zod schema 校验。
+3. 供应商映射与 HS Code 映射（外置 CSV）。
+4. 按 `Pay-to Vendor No.` 分组：`m 个 PDF → n 个供应商组`（通常 `m ≥ n`）。
+5. preflight 校验后给出**干跑预览**（每组将填什么 + 校验结果）。
+6. 人工确认后，逐组在网站执行 `login → open_form → fill_basic_info → select_supplier → fill_line_items → 임시저장`，输出结果报告。
+7. 凭据**仅内存态**：每会话在界面输入，后端只在本次运行内存中持有，绝不写盘、不记日志。
 
 ## 2. 目录结构
 
 ```text
 utradehub_automation/
-├─ app/
-│  ├─ config.py
-│  ├─ models.py
-│  ├─ pdf_reader.py
-│  ├─ vendor_mapping_loader.py
-│  ├─ field_mapper.py
-│  ├─ site_bot.py
-│  ├─ workflow.py
-│  └─ __init__.py
-├─ desktop/                  # GUI 入口相关模块
-├─ data/
-│  ├─ input_pdfs/            # PDF 输入目录
-│  ├─ extracted/             # 中间结果与汇总结果
-│  └─ local/                 # 本地映射文件目录
-├─ packaging/                # 打包脚本与安装脚本
-├─ resources/                # 图标等资源
-├─ launcher_gui.py           # GUI 启动入口（开发环境）
-├─ main.py                   # CLI 启动入口（开发调试）
-├─ README_USER.md            # 最终用户说明
+├─ src/
+│  ├─ core/        # 纯领域逻辑（模型/映射/分组/校验/提交计划），无 I/O，全单元测试
+│  ├─ ports/       # 外部依赖接口（LLM provider、浏览器驱动、PDF 取文本、Extractor）
+│  ├─ adapters/    # ports 的实现（LLM 抽取、unpdf、Playwright 驱动、站点契约、漂移检测）
+│  └─ app/         # 组装根：DTO、编排、环境检查、Fastify server
+├─ web/            # React + Vite 前端（配置 / 干跑预览 / 凭据 + 运行 / 报告）
+├─ test/           # 单元测试与 test/fixtures/ golden-file 夹具
+├─ examples/       # vendor_mapping.example.csv 等模板
+├─ docs/           # ARCHITECTURE.md
+├─ openspec/       # 规格（specs/）与变更历史（changes/archive/）
 ├─ .env.example
-└─ config.user.example.json
+└─ run.bat         # 一键启动（= npm run start）
 ```
 
-## 3. 模块职责
+## 3. 供应商映射 CSV（固定列）
 
-1. `app/pdf_reader.py`
-- 解析 PDF 文本并抽取元字段和行项目。
-
-2. `app/field_mapper.py`
-- 把 `RawPdfData` 映射成 `FormRecord`。
-- 通过外部 CSV 映射供应商韩文名和 HS Code。
-- 执行统一 preflight 校验（当前校验：`source_file/supplier_name/hs_code/line_items`）。
-
-3. `app/workflow.py`
-- 批量处理 PDF。
-- 按供应商分组并构建 group record。
-- 每个 group 执行一次网页保存并记录结果。
-
-4. `app/site_bot.py`
-- 封装网页动作，含供应商选择与逐行填报行项目。
-
-5. `desktop/*`
-- GUI 配置加载/保存、运行校验、日志回显、批处理触发。
-
-## 4. 数据流
-
-```text
-PDF -> pdf_reader -> RawPdfData
-RawPdfData -> field_mapper(+vendor mapping CSV) -> FormRecord
-FormRecord -> validate_record(preflight) -> valid/invalid
-valid records -> group by Pay-to Vendor No.
-grouped records -> site_bot.save_record -> SaveResult
-SaveResult -> workflow -> batch_results.csv/jsonl + logs
-```
-
-## 5. 供应商映射 CSV（固定列）
-
-- 通过 `VENDOR_MAPPING_PATH` 指向 CSV 文件。
-- 未配置时默认使用 `data/local/vendor_mapping.csv`。
-- 模板：`data/local/vendor_mapping.example.csv`
-
-CSV 列名必须固定为：
+界面里选择一份 CSV 作为供应商映射。列名必须固定为：
 
 ```csv
 vendor_name_en,supplier_name_ko,hs_code
 Skin Medience,스킨메디언스,3916909000
 ```
 
-## 6. 开发环境运行（CLI / GUI）
+模板见 [`examples/vendor_mapping.example.csv`](./examples/vendor_mapping.example.csv)；把它复制成你自己的映射文件，**不要把私有映射数据提交到仓库**。
 
-1. 安装依赖
+## 4. 运行 / 交付（面向非技术操作员）
 
-```powershell
-cd F:\utradehub_automation
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m playwright install chromium
-```
+1. 一次性准备：`npm install && npm run build`。
+2. 双击 `run.bat`（等价于 `npm run start`）——启动本地服务并自动打开浏览器。
+3. 在界面里：填 LLM 配置（可选）与供应商映射 CSV、选 PDF →「干跑预览」→ 核对每组 → 输入本次登录账号密码（**仅内存、不保存**）→ 勾选确认 →「确认并运行」→ 看结果报告。
+4. 程序只建到 임시저장 草稿；请到 uTradeHub 复核后再由人正式 발급。
 
-2. 配置 `.env`（CLI 调试使用）
+**运行前提**：操作员系统已装 Chrome；已配置 LLM（`.env`：`LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`）；映射 CSV 就绪。界面/`checkEnvironment()` 会在运行前汇总阻断项。
 
-```powershell
-copy .env.example .env
-```
-
-3. 启动 GUI（推荐）
-
-```powershell
-.\.venv\Scripts\python.exe launcher_gui.py
-```
-
-4. 启动 CLI（开发调试）
-
-```powershell
-.\.venv\Scripts\python.exe main.py
-```
-
-## 7. 桌面版打包与交付
-
-1. 构建桌面产物
-
-```powershell
-cd F:\utradehub_automation
-.\packaging\build.ps1 -Clean
-```
-
-2. 检查 `packaging/output/UTradeHubDesktop` 至少包含：
-- `UTradeHubDesktop.exe`
-- `README_USER.md`
-- `config.user.json.example`
-- `data/local/vendor_mapping.example.csv`
-- `playwright-browsers/chromium-*`
-
-3. 用 Inno Setup 打开并编译 `packaging/installer.iss`。
-4. 交付安装包 `UTradeHubAutomationSetup.exe` 和 `README_USER.md`。
-
-## 8. GUI 运行时路径（重要）
-
-- 实际运行配置：`%LOCALAPPDATA%\UTradeHubAutomation\config.user.json`
-- 默认输入目录：`%LOCALAPPDATA%\UTradeHubAutomation\data\input_pdfs`
-- 默认输出目录：`%LOCALAPPDATA%\UTradeHubAutomation\data\extracted`
-- 运行日志目录：`%LOCALAPPDATA%\UTradeHubAutomation\logs`
-
-补充说明：
-- 安装包只携带模板 `config.user.json.example`。
-- 首次 GUI 启动会自动创建运行配置文件。
-- 若发现旧版 `<install_dir>/config.user.json`，会做一次迁移。
-
-## 9. 打包检查（Playwright 浏览器）
-
-1. 编译前先执行 `packaging/build.ps1 -Clean`。
-2. 确认产物目录含 `playwright-browsers/chromium-*`。
-3. 安装后若报 `BrowserType.launch: Executable doesn't exist`，说明浏览器文件未被正确打包或覆盖。
-4. 处理方式：重新 `build.ps1 -Clean` -> 重新编译安装包 -> 卸载旧版后重装。
-
-## 10. 维护注意事项
-
-1. 不要在 `site_bot.py` 硬编码供应商与 HS Code。
-2. 真实映射数据放在本地 CSV，不要提交到仓库。
-3. 优先使用 Playwright 自动等待，减少硬编码 sleep。
-4. 保留 `*.raw.json` 与 `*.record.json` 便于排障追溯。
-
-## 11. 开发（TypeScript 重写）
-
-> 仓库正在迁移到 **TypeScript 全栈本地 Web 应用**（背景见 `docs/ARCHITECTURE.md` 与 `openspec/changes/`）。
-> 过渡期内，上面 1–10 节描述的旧 Python 工具仍保留；新工程位于仓库根的 `src/`、`test/`。
+## 5. 开发
 
 环境：Node ≥ 24、npm（开发机未装 pnpm）。
 
 ```powershell
-npm install          # 安装开发依赖
+npm install          # 安装依赖
+npm run dev          # 开发模式：Vite 前端 + Fastify 后端并行
 npm run verify       # typecheck + lint + format:check + test（唯一健康判据）
 npm test             # 仅跑测试
 npm run format       # 用 Prettier 自动格式化
 ```
 
-工程布局：
-- `src/core/` 纯领域逻辑（无 I/O，全单元测试）
-- `src/ports/` 外部依赖接口；`src/adapters/` 其实现；`src/app/` 组装根
-- `test/` 单元测试与 `test/fixtures/` golden-file 夹具
+工程约定（详见 `docs/ARCHITECTURE.md`）：
+- functional-core / imperative-shell 分层；所有外部依赖（LLM、浏览器、文件系统、时钟）仅经 ports 访问，使核心可零 I/O 单测。
+- 凭据/密钥不入库；只提交不含密钥的 `.env.example`。
+- golden-file 夹具驱动确定性测试。
 
-CI（`.github/workflows/ci.yml`）在每次 push/PR 跑 `npm run verify`。"失败即拦截合并"需在 GitHub 仓库手动开启分支保护，详见 `docs/ARCHITECTURE.md`。
+CI（`.github/workflows/ci.yml`）在每次 push/PR 跑 `npm run verify`。“失败即拦截合并”需在 GitHub 仓库手动开启分支保护。
 
-## 12. 运行 / 交付（本地 Web 应用）
+## 6. 站点集成测试（gated）
 
-面向非技术操作员：
-1. 一次性准备：`npm install && npm run build`。
-2. 双击 `run.bat`（等价于 `npm run start`）——启动本地服务并自动打开浏览器。
-3. 在界面里：填供应商映射 CSV、选 PDF →「干跑预览」→ 核对每组 → 输入本次登录账号密码（**仅内存、不保存**）→ 勾选确认 →「确认并运行」→ 看结果报告。
-4. 程序只建到 임시저장 草稿；请到 uTradeHub 复核后再由人正式 발급。
+连真实 uTradeHub 跑一次到草稿的集成测试默认跳过，仅在显式开启时运行：
 
-开发模式：`npm run dev`（Vite 前端 + Fastify 后端并行）。
+```powershell
+$env:SITE_E2E = "1"   # 并配置 .env 的 SITE_BASE_URL / SITE_USERNAME / SITE_PASSWORD（仅开发机，永不入库）
+npm test
+```
+
+默认 `npm run verify` 为零浏览器、零网络。

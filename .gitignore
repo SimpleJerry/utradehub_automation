@@ -1,31 +1,17 @@
-﻿.venv/
-__pycache__/
-*.py[cod]
+# editors
 .idea/
 .vscode/
 
-# env / user local config
+# env
 .env
-config.user.json
 
-# runtime outputs
-logs/*.log
-data/extracted/*
-!data/extracted/.gitkeep
-data/input_pdfs/*
-!data/input_pdfs/.gitkeep
-
-# local vendor mapping (do not commit private mapping data)
-data/local/vendor_mapping.*
-!data/local/vendor_mapping.example.csv
-
-# build artifacts
-build/
-dist/
-packaging/output/
-playwright-browsers/
-
-# node / typescript rewrite
+# node / typescript
 node_modules/
 coverage/
+dist/
+build/
 web/dist/
+
+# local vendor mapping (do not commit private mapping data)
+examples/vendor_mapping.*
+!examples/vendor_mapping.example.csv

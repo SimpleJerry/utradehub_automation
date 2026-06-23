@@ -5,163 +5,86 @@
 - English: [README.en.md](./README.en.md)
 - 한국어 (현재): [README.ko.md](./README.ko.md)
 
-이 프로젝트는 “PDF 일괄 읽기 -> 필드 추출 -> 매핑/정규화 -> 웹 폼 자동 입력” 자동화를 위한 저장소입니다.
+**구매주문 PDF → 필드 추출 → 매핑/정규화 → 공급사 기준 그룹화 → uTradeHub 사이트에서 구매확인서 임시저장 초안 생성**까지 수행하는 로컬 도구입니다.
 
-현재 저장소 상태(실행 가능):
-- PDF 파싱 및 핵심 필드 추출이 구현되어 있습니다.
-- 공급사/HS Code 매핑은 외부 CSV로 분리되어 있습니다.
-- `Pay-to Vendor No.` 기준으로 그룹화한 뒤 그룹당 1회 웹 저장을 수행합니다.
-- GUI 데스크톱 진입점, 로그, 배치 결과 출력이 연결되어 있습니다.
+**휴먼 게이트(하드 제약):** 본 도구는 **임시저장 초안**만 생성하며, 최종 발급/제출 버튼은 절대 누르지 않습니다. 최종 발급은 사람이 uTradeHub에서 검토한 뒤 수동으로 진행합니다. 자동 신고 도구가 아니라 *초안 생성기*입니다.
 
-## 1. 기능 범위 (현재 버전)
+기술 형태: **TypeScript 풀스택 로컬 웹 앱**(Fastify 백엔드 + React/Vite UI)으로, **운영자 시스템의 Chrome**을 Playwright로 구동합니다(`channel:"chrome"`, Chromium 번들 없음). 배경은 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)와 `openspec/`(스펙 및 변경 이력)를 참고하세요.
 
-1. `input_pdfs` 디렉터리의 여러 PDF를 순회 처리합니다.
-2. 핵심 필드(`Blanket Purchase Order No.`, `Document Date`, `Pay-to Vendor No.`, 품목 행)를 추출합니다.
-3. preflight 검증 후 공급사 기준 그룹 처리: `m개 PDF -> n개 공급사 그룹 -> n회 웹 저장`(보통 `m >= n`).
-4. 웹 동작 메인 체인: `login -> open_form -> fill_basic_info -> select_supplier -> fill_order_from_pdf -> save`.
-5. 중간 산출물, 요약 CSV/JSONL, 실행 로그를 출력합니다.
+## 1. 기능 범위
+
+1. 여러 구매주문 PDF를 일괄 수집합니다.
+2. LLM 기반(공급자 비종속, OpenAI 호환) 구조화 추출로 핵심 필드(`Blanket Purchase Order No.`, `Document Date`, `Pay-to Vendor No.`, 품목 행)를 뽑고 zod 스키마로 검증합니다.
+3. 공급사/HS Code 매핑은 외부 CSV로 처리합니다.
+4. `Pay-to Vendor No.` 기준 그룹화: `m개 PDF → n개 공급사 그룹`(보통 `m ≥ n`).
+5. preflight 검증 후 **드라이런 미리보기**(각 그룹이 입력할 내용 + 검증 결과)를 표시합니다.
+6. 사람이 확인한 뒤, 그룹별로 사이트에서 `login → open_form → fill_basic_info → select_supplier → fill_line_items → 임시저장`을 실행하고 결과 리포트를 출력합니다.
+7. 자격증명은 **메모리 전용**: 세션마다 UI에서 입력하고 해당 실행의 메모리에만 보관하며, 디스크나 로그에 절대 기록하지 않습니다.
 
 ## 2. 디렉터리 구조
 
 ```text
 utradehub_automation/
-├─ app/
-│  ├─ config.py
-│  ├─ models.py
-│  ├─ pdf_reader.py
-│  ├─ vendor_mapping_loader.py
-│  ├─ field_mapper.py
-│  ├─ site_bot.py
-│  ├─ workflow.py
-│  └─ __init__.py
-├─ desktop/                  # GUI 관련 모듈
-├─ data/
-│  ├─ input_pdfs/            # PDF 입력 디렉터리
-│  ├─ extracted/             # 중간/요약 출력
-│  └─ local/                 # 로컬 매핑 파일
-├─ packaging/                # 패키징/설치 스크립트
-├─ resources/                # 아이콘 및 리소스
-├─ launcher_gui.py           # GUI 실행 진입점(개발 환경)
-├─ main.py                   # CLI 실행 진입점(개발/디버깅)
-├─ README_USER.md            # 최종 사용자 안내서
+├─ src/
+│  ├─ core/        # 순수 도메인 로직(모델/매핑/그룹화/검증/제출 계획), I/O 없음, 전부 단위 테스트
+│  ├─ ports/       # 외부 의존성 인터페이스(LLM provider, 브라우저 드라이버, PDF 텍스트, Extractor)
+│  ├─ adapters/    # ports 구현(LLM 추출, unpdf, Playwright 드라이버, 사이트 계약, 드리프트 감지)
+│  └─ app/         # 조립 루트: DTO, 오케스트레이션, 환경 점검, Fastify 서버
+├─ web/            # React + Vite 프런트엔드(설정 / 드라이런 미리보기 / 자격증명 + 실행 / 리포트)
+├─ test/           # 단위 테스트 및 test/fixtures/ golden-file 픽스처
+├─ examples/       # vendor_mapping.example.csv 등 템플릿
+├─ docs/           # ARCHITECTURE.md
+├─ openspec/       # 스펙(specs/)과 변경 이력(changes/archive/)
 ├─ .env.example
-└─ config.user.example.json
+└─ run.bat         # 원클릭 실행(= npm run start)
 ```
 
-## 3. 모듈 역할
+## 3. 공급사 매핑 CSV (고정 컬럼)
 
-1. `app/pdf_reader.py`
-- PDF 텍스트를 파싱하고 메타데이터/품목 행을 추출합니다.
-
-2. `app/field_mapper.py`
-- `RawPdfData`를 `FormRecord`로 매핑합니다.
-- 외부 CSV를 통해 공급사(한글명)와 HS Code를 매핑합니다.
-- 통합 preflight 검증을 수행합니다(`source_file/supplier_name/hs_code/line_items`).
-
-3. `app/workflow.py`
-- PDF 배치 처리.
-- 공급사 기준 그룹화 및 그룹 레코드 생성.
-- 그룹당 1회 웹 저장 실행 및 결과 기록.
-
-4. `app/site_bot.py`
-- 공급사 선택, 품목 행 입력을 포함한 웹 동작을 캡슐화합니다.
-
-5. `desktop/*`
-- GUI 설정 저장/로딩, 실행 전 검증, 로그 표시, 배치 실행 트리거를 담당합니다.
-
-## 4. 데이터 흐름
-
-```text
-PDF -> pdf_reader -> RawPdfData
-RawPdfData -> field_mapper(+vendor mapping CSV) -> FormRecord
-FormRecord -> validate_record(preflight) -> valid/invalid
-valid records -> group by Pay-to Vendor No.
-grouped records -> site_bot.save_record -> SaveResult
-SaveResult -> workflow -> batch_results.csv/jsonl + logs
-```
-
-## 5. 공급사 매핑 CSV (고정 컬럼)
-
-- `VENDOR_MAPPING_PATH`로 CSV 경로를 지정합니다.
-- 미지정 시 기본값: `data/local/vendor_mapping.csv`
-- 템플릿: `data/local/vendor_mapping.example.csv`
-
-CSV 컬럼은 아래와 같이 고정입니다:
+UI에서 공급사 매핑용 CSV를 선택합니다. 컬럼명은 아래와 같이 고정입니다:
 
 ```csv
 vendor_name_en,supplier_name_ko,hs_code
 Skin Medience,스킨메디언스,3916909000
 ```
 
-## 6. 개발 환경 실행 (CLI / GUI)
+템플릿은 [`examples/vendor_mapping.example.csv`](./examples/vendor_mapping.example.csv)를 참고하세요. 이를 복사해 자신의 매핑 파일로 만들고, **실제 매핑 데이터는 저장소에 커밋하지 마세요.**
 
-1. 의존성 설치
+## 4. 실행 / 배포 (비기술 운영자용)
 
-```powershell
-cd F:\utradehub_automation
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m playwright install chromium
-```
+1. 1회 준비: `npm install && npm run build`.
+2. `run.bat` 더블클릭(= `npm run start`) — 로컬 서비스를 시작하고 브라우저를 자동으로 엽니다.
+3. UI에서: LLM 설정(선택)과 공급사 매핑 CSV 입력, PDF 선택 → "드라이런 미리보기" → 각 그룹 확인 → 이번 세션 로그인 아이디/비밀번호 입력(**메모리 전용, 저장 안 함**) → 확인 체크 → "확인 후 실행" → 결과 리포트 확인.
+4. 도구는 임시저장 초안까지만 만듭니다. uTradeHub에서 검토한 뒤 사람이 최종 발급을 진행하세요.
 
-2. `.env` 설정 (CLI 디버깅용)
+**사전 조건:** 운영자 시스템에 Chrome 설치; LLM 설정(`.env`: `LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`); 매핑 CSV 준비. 실행 전 UI / `checkEnvironment()`가 차단 항목을 요약합니다.
 
-```powershell
-copy .env.example .env
-```
+## 5. 개발
 
-3. GUI 실행 (권장)
+환경: Node ≥ 24, npm(개발 머신에 pnpm 미설치).
 
 ```powershell
-.\.venv\Scripts\python.exe launcher_gui.py
+npm install          # 의존성 설치
+npm run dev          # 개발 모드: Vite 프런트엔드 + Fastify 백엔드 병렬
+npm run verify       # typecheck + lint + format:check + test(유일한 헬스 게이트)
+npm test             # 테스트만 실행
+npm run format       # Prettier 자동 포맷
 ```
 
-4. CLI 실행 (개발/디버깅)
+규약(`docs/ARCHITECTURE.md` 참고):
+- functional-core / imperative-shell 계층화; 모든 외부 의존성(LLM, 브라우저, 파일시스템, 시계)은 ports를 통해서만 접근하여 코어를 I/O 없이 단위 테스트합니다.
+- 자격증명/시크릿은 절대 커밋하지 않으며, 시크릿이 없는 `.env.example`만 체크인합니다.
+- golden-file 픽스처로 결정적 테스트를 구동합니다.
+
+CI(`.github/workflows/ci.yml`)는 모든 push/PR에서 `npm run verify`를 실행합니다. "실패 시 머지 차단"은 GitHub 저장소 설정에서 브랜치 보호를 직접 활성화해야 합니다.
+
+## 6. 사이트 통합 테스트 (gated)
+
+실제 uTradeHub 사이트를 초안까지 구동하는 통합 테스트는 기본적으로 건너뛰며, 명시적으로 활성화할 때만 실행됩니다:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py
+$env:SITE_E2E = "1"   # 추가로 .env의 SITE_BASE_URL / SITE_USERNAME / SITE_PASSWORD(개발 머신 전용, 절대 커밋 금지)
+npm test
 ```
 
-## 7. 데스크톱 패키징 및 배포
-
-1. 데스크톱 산출물 빌드
-
-```powershell
-cd F:\utradehub_automation
-.\packaging\build.ps1 -Clean
-```
-
-2. `packaging/output/UTradeHubDesktop`에 아래가 포함되어 있는지 확인:
-- `UTradeHubDesktop.exe`
-- `README_USER.md`
-- `config.user.json.example`
-- `data/local/vendor_mapping.example.csv`
-- `playwright-browsers/chromium-*`
-
-3. Inno Setup에서 `packaging/installer.iss`를 열어 컴파일합니다.
-4. `UTradeHubAutomationSetup.exe`와 `README_USER.md`를 함께 전달합니다.
-
-## 8. GUI 런타임 경로 (중요)
-
-- 런타임 설정 파일: `%LOCALAPPDATA%\UTradeHubAutomation\config.user.json`
-- 기본 입력 디렉터리: `%LOCALAPPDATA%\UTradeHubAutomation\data\input_pdfs`
-- 기본 출력 디렉터리: `%LOCALAPPDATA%\UTradeHubAutomation\data\extracted`
-- 실행 로그 디렉터리: `%LOCALAPPDATA%\UTradeHubAutomation\logs`
-
-참고:
-- 설치 패키지에는 템플릿 `config.user.json.example`만 포함됩니다.
-- GUI 첫 실행 시 런타임 설정 파일이 자동 생성됩니다.
-- 구버전 `<install_dir>/config.user.json`이 있으면 1회 마이그레이션합니다.
-
-## 9. 패키징 점검 (Playwright 브라우저)
-
-1. 설치 패키지 컴파일 전에 `packaging/build.ps1 -Clean` 실행.
-2. 산출물에 `playwright-browsers/chromium-*` 존재 여부 확인.
-3. 설치 후 `BrowserType.launch: Executable doesn't exist` 오류가 나오면 브라우저 파일 패키징/복사 누락입니다.
-4. 해결 순서: `build.ps1 -Clean` 재실행 -> 설치 패키지 재컴파일 -> 구버전 제거 후 재설치.
-
-## 10. 유지보수 주의사항
-
-1. `site_bot.py`에 공급사/HS 매핑을 하드코딩하지 않습니다.
-2. 실제 매핑 데이터는 로컬 CSV에 두고 저장소에는 커밋하지 않습니다.
-3. 하드코딩 sleep보다 Playwright 자동 대기를 우선 사용합니다.
-4. 장애 추적을 위해 `*.raw.json`, `*.record.json`을 유지합니다.
+기본 `npm run verify`는 브라우저 0, 네트워크 0입니다.
