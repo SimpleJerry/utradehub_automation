@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { SupplierGroup } from "../../core/model.js";
 import { previewBatch, submitBatch, type PdfInput, type PreviewPorts } from "../orchestrator.js";
+import type { LlmRequestConfig } from "../dto.js";
 import type { ServerDeps } from "./deps.js";
 
 interface PreviewBody {
   mappingCsv: string;
   pdfs: { sourceFile: string; base64: string }[];
+  llm: LlmRequestConfig;
 }
 
 interface RunBody {
@@ -34,7 +36,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       sourceFile: p.sourceFile,
       pdf: Buffer.from(p.base64, "base64"),
     }));
-    const ports: PreviewPorts = { extractor: deps.extractor, mapping: mapping.value };
+    const ports: PreviewPorts = {
+      extractor: deps.makeExtractor(body.llm),
+      mapping: mapping.value,
+    };
 
     const outcome = await previewBatch(inputs, ports);
     const sessionId = randomUUID();

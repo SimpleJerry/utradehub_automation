@@ -45,6 +45,13 @@ export interface PdfUpload {
   base64: string;
 }
 
+/** LLM config supplied per request; apiKey is held in memory only (never persisted). */
+export interface LlmRequestConfig {
+  apiKey: string;
+  model?: string;
+  baseUrl?: string;
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -61,8 +68,12 @@ export async function fetchEnvironment(): Promise<EnvIssue[]> {
   return data.issues;
 }
 
-export function preview(mappingCsv: string, pdfs: PdfUpload[]): Promise<PreviewResponse> {
-  return postJson<PreviewResponse>("/api/preview", { mappingCsv, pdfs });
+export function preview(
+  mappingCsv: string,
+  pdfs: PdfUpload[],
+  llm: LlmRequestConfig,
+): Promise<PreviewResponse> {
+  return postJson<PreviewResponse>("/api/preview", { mappingCsv, pdfs, llm });
 }
 
 export function run(

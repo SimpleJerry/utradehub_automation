@@ -22,6 +22,11 @@ function toBase64(buffer: ArrayBuffer): string {
 export function App() {
   const [phase, setPhase] = useState<Phase>("config");
   const [mappingCsv, setMappingCsv] = useState("");
+  const [mappingFileName, setMappingFileName] = useState("");
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmModel, setLlmModel] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [pdfs, setPdfs] = useState<PdfUpload[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [groups, setGroups] = useState<GroupPreview[]>([]);
@@ -46,11 +51,22 @@ export function App() {
     setPdfs(uploads);
   }
 
+  async function handleMappingFile(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+    setMappingCsv(await file.text());
+    setMappingFileName(file.name);
+  }
+
   async function handlePreview() {
     setBusy(true);
     setError("");
     try {
-      const result = await preview(mappingCsv, pdfs);
+      const result = await preview(mappingCsv, pdfs, {
+        apiKey: llmApiKey,
+        model: llmModel || undefined,
+        baseUrl: llmBaseUrl || undefined,
+      });
       setSessionId(result.sessionId);
       setGroups(result.groups);
       setApproved(
@@ -99,13 +115,56 @@ export function App() {
       {phase === "config" && (
         <section>
           <h2>1. 配置</h2>
-          <p>供应商映射 CSV（vendor_name_en,supplier_name_ko,hs_code）：</p>
-          <textarea
-            value={mappingCsv}
-            onChange={(e) => setMappingCsv(e.target.value)}
-            rows={4}
+          <p>uTradeHub 网址（固定）：</p>
+          <input
+            value={credentials.baseUrl}
+            readOnly
+            aria-label="uTradeHub 网址"
+            style={{ width: "100%", background: "#f0f0f0" }}
+          />
+
+          <p>供应商映射 CSV 文件（列：vendor_name_en,supplier_name_ko,hs_code）：</p>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            aria-label="供应商映射 CSV"
+            onChange={(e) => void handleMappingFile(e.target.files)}
+          />
+          <p>{mappingFileName === "" ? "未选择映射文件" : `已加载映射：${mappingFileName}`}</p>
+
+          <p>LLM API Key（仅本次会话，不保存）：</p>
+          <input
+            type="password"
+            placeholder="API Key"
+            aria-label="LLM API Key"
+            value={llmApiKey}
+            onChange={(e) => setLlmApiKey(e.target.value)}
             style={{ width: "100%" }}
           />
+          <p>
+            <button type="button" onClick={() => setShowAdvanced((v) => !v)}>
+              {showAdvanced ? "▾ 高级（可选）" : "▸ 高级（可选）"}
+            </button>
+          </p>
+          {showAdvanced && (
+            <div>
+              <input
+                placeholder="模型（默认 deepseek-v4-flash）"
+                aria-label="LLM 模型"
+                value={llmModel}
+                onChange={(e) => setLlmModel(e.target.value)}
+                style={{ width: "100%", marginBottom: 4 }}
+              />
+              <input
+                placeholder="Base URL（默认 https://api.deepseek.com）"
+                aria-label="LLM Base URL"
+                value={llmBaseUrl}
+                onChange={(e) => setLlmBaseUrl(e.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
+          )}
+
           <p>选择 PDF：</p>
           <input
             type="file"
@@ -114,7 +173,10 @@ export function App() {
             onChange={(e) => void handleFiles(e.target.files)}
           />
           <p>{pdfs.length} 个 PDF 已就绪</p>
-          <button disabled={busy || pdfs.length === 0} onClick={() => void handlePreview()}>
+          <button
+            disabled={busy || pdfs.length === 0 || mappingCsv === "" || llmApiKey === ""}
+            onClick={() => void handlePreview()}
+          >
             干跑预览
           </button>
         </section>

@@ -1,5 +1,12 @@
 import type { LineItem } from "../core/model.js";
 
+/** LLM config supplied per request by the operator. apiKey is in-memory only, never persisted. */
+export interface LlmRequestConfig {
+  apiKey: string;
+  model?: string;
+  baseUrl?: string;
+}
+
 export interface ExtractionFailure {
   sourceFile: string;
   error: string;

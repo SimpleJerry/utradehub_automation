@@ -29,7 +29,7 @@ function fakeDeps(): ServerDeps {
     createDraft: () => Promise.resolve(ok({ success: true, referenceNo: "123456", message: "ok" })),
   };
   return {
-    extractor,
+    makeExtractor: () => extractor,
     driver,
     parseMapping: (content) => parseVendorMapping(content),
     detectEnvironment: () => Promise.resolve([]),
@@ -51,7 +51,11 @@ describe("HTTP API", () => {
     const preview = await app.inject({
       method: "POST",
       url: "/api/preview",
-      payload: { mappingCsv: csv, pdfs: [{ sourceFile: "a.pdf", base64: "AAAA" }] },
+      payload: {
+        mappingCsv: csv,
+        pdfs: [{ sourceFile: "a.pdf", base64: "AAAA" }],
+        llm: { apiKey: "test-key" },
+      },
     });
     const previewBody = JSON.parse(preview.payload) as {
       sessionId: string;

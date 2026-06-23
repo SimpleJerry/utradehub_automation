@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { LlmExtractor } from "../../adapters/llm-extractor.js";
-import { AiSdkLlmProvider, type LlmConfig } from "../../adapters/llm-provider.js";
+import { AiSdkLlmProvider } from "../../adapters/llm-provider.js";
 import { UnpdfTextExtractor } from "../../adapters/pdf-text.js";
 import { PlaywrightDriver } from "../../adapters/playwright-driver.js";
 import { parseVendorMapping } from "../../adapters/vendor-mapping-loader.js";
@@ -8,21 +8,24 @@ import type { Result } from "../../core/result.js";
 import type { VendorMapping } from "../../core/vendor-mapping.js";
 import type { BrowserDriver } from "../../ports/browser-driver.js";
 import type { Extractor } from "../../ports/extractor.js";
+import type { LlmRequestConfig } from "../dto.js";
 import { checkEnvironment, type EnvIssue } from "../environment.js";
 
+/**
+ * Defaults for the non-sensitive LLM config. The API key is always operator-supplied
+ * (entered in the UI per session, in memory only — never read from the environment or disk).
+ */
+export const LLM_DEFAULTS = {
+  model: "deepseek-v4-flash",
+  baseUrl: "https://api.deepseek.com",
+} as const;
+
 export interface ServerDeps {
-  extractor: Extractor;
+  /** Build an extractor from the operator-supplied LLM config (per request). */
+  makeExtractor: (llm: LlmRequestConfig) => Extractor;
   driver: BrowserDriver;
   parseMapping: (csv: string) => Result<VendorMapping>;
   detectEnvironment: () => Promise<EnvIssue[]>;
-}
-
-function loadLlmConfig(): LlmConfig {
-  return {
-    baseUrl: (process.env.LLM_BASE_URL ?? "").trim(),
-    model: (process.env.LLM_MODEL ?? "").trim(),
-    apiKey: (process.env.LLM_API_KEY ?? "").trim(),
-  };
 }
 
 function hasSystemChrome(): boolean {
@@ -35,18 +38,18 @@ function hasSystemChrome(): boolean {
 }
 
 export function createProductionDeps(): ServerDeps {
-  const extractor = new LlmExtractor(
-    new UnpdfTextExtractor(),
-    new AiSdkLlmProvider(loadLlmConfig()),
-  );
-  const driver = new PlaywrightDriver();
   return {
-    extractor,
-    driver,
-    parseMapping: (csv) => parseVendorMapping(csv),
-    detectEnvironment: () =>
-      Promise.resolve(
-        checkEnvironment({ hasChrome: hasSystemChrome(), llmApiKey: process.env.LLM_API_KEY }),
+    makeExtractor: (llm) =>
+      new LlmExtractor(
+        new UnpdfTextExtractor(),
+        new AiSdkLlmProvider({
+          apiKey: llm.apiKey,
+          model: llm.model?.trim() ? llm.model : LLM_DEFAULTS.model,
+          baseUrl: llm.baseUrl?.trim() ? llm.baseUrl : LLM_DEFAULTS.baseUrl,
+        }),
       ),
+    driver: new PlaywrightDriver(),
+    parseMapping: (csv) => parseVendorMapping(csv),
+    detectEnvironment: () => Promise.resolve(checkEnvironment({ hasChrome: hasSystemChrome() })),
   };
 }
