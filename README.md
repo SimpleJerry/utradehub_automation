@@ -186,3 +186,13 @@ npm run format       # 用 Prettier 自动格式化
 - `test/` 单元测试与 `test/fixtures/` golden-file 夹具
 
 CI（`.github/workflows/ci.yml`）在每次 push/PR 跑 `npm run verify`。"失败即拦截合并"需在 GitHub 仓库手动开启分支保护，详见 `docs/ARCHITECTURE.md`。
+
+## 12. 运行 / 交付（本地 Web 应用）
+
+面向非技术操作员：
+1. 一次性准备：`npm install && npm run build`。
+2. 双击 `run.bat`（等价于 `npm run start`）——启动本地服务并自动打开浏览器。
+3. 在界面里：填供应商映射 CSV、选 PDF →「干跑预览」→ 核对每组 → 输入本次登录账号密码（**仅内存、不保存**）→ 勾选确认 →「确认并运行」→ 看结果报告。
+4. 程序只建到 임시저장 草稿；请到 uTradeHub 复核后再由人正式 발급。
+
+开发模式：`npm run dev`（Vite 前端 + Fastify 后端并行）。

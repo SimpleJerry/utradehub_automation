@@ -14,18 +14,18 @@
 
 ## 3. 前端（React + Vite）
 
-- [ ] 3.1 添加 `react`/`react-dom`/`vite`/`@vitejs/plugin-react`/`@types/react`/`@types/react-dom`；`web/` 脚手架（`index.html`、`main.tsx`、`vite.config.ts`、dev 代理 `/api`）
-- [ ] 3.2 界面：配置页（LLM 可选/映射 CSV/上传 PDF）、干跑预览页（每组将填什么 + 校验）、凭据输入 + 运行 + SSE 进度、报告页
-- [ ] 3.3 `tsconfig` 纳入 `web/`（`jsx: react-jsx`）；ESLint 加 `eslint-plugin-react-hooks`；Vitest 前端用 jsdom（按文件标注）
-- [ ] 3.4 测试：关键组件渲染（预览/校验展示、未确认禁用运行）
+- [x] 3.1 添加 `react`/`react-dom`/`vite`/`@vitejs/plugin-react`/`@types/react`/`@types/react-dom`；`web/` 脚手架（`index.html`、`main.tsx`、`vite.config.ts`、dev 代理 `/api`）
+- [x] 3.2 界面：配置页（LLM 可选/映射 CSV/上传 PDF）、干跑预览页（每组将填什么 + 校验）、凭据输入 + 运行 + SSE 进度、报告页
+- [x] 3.3 `tsconfig` 纳入 `web/`（`jsx: react-jsx`）；ESLint 加 `eslint-plugin-react-hooks`；Vitest 前端用 jsdom（按文件标注）
+- [x] 3.4 测试：关键组件渲染（预览/校验展示、未确认禁用运行）
 
 ## 4. 启动器与构建
 
-- [ ] 4.1 npm scripts：`dev`（vite + fastify 并行）、`build`（vite build + 后端打包）、`start`（起服务并打开浏览器）
-- [ ] 4.2 `run.bat`：一键起服务 + 开浏览器
-- [ ] 4.3 README 增补"运行/交付（本地 Web 应用）"一节
+- [x] 4.1 npm scripts：`dev`（vite + fastify 并行）、`build`（vite build + 后端打包）、`start`（起服务并打开浏览器）
+- [x] 4.2 `run.bat`：一键起服务 + 开浏览器
+- [x] 4.3 README 增补"运行/交付（本地 Web 应用）"一节
 
 ## 5. 收尾
 
-- [ ] 5.1 `npm run verify` 全绿（前后端 typecheck/lint/test）
-- [ ] 5.2 在 README/ARCHITECTURE 记一笔：旧 Python 树退役/清理另排一个变更
+- [x] 5.1 `npm run verify` 全绿（前后端 typecheck/lint/test）
+- [x] 5.2 在 README/ARCHITECTURE 记一笔：旧 Python 树退役/清理另排一个变更

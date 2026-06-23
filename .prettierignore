@@ -3,6 +3,7 @@ node_modules/
 coverage/
 dist/
 build/
+web/dist/
 .venv/
 __pycache__/
 playwright-browsers/

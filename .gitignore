@@ -28,3 +28,4 @@ playwright-browsers/
 # node / typescript rewrite
 node_modules/
 coverage/
+web/dist/
