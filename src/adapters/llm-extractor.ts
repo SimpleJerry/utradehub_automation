@@ -14,7 +14,7 @@ const SYSTEM_PROMPT =
   "(Blanket Purchase Order) PDF. Return the Blanket Purchase Order number, the document " +
   "date as ISO yyyy-mm-dd, the English Pay-to Vendor name, and every line item " +
   "(description, numeric quantity, numeric unit price). Use null for an absent header " +
-  "field. Do not invent data.";
+  "field. Do not invent data. Respond with a single JSON object containing these fields.";
 
 /** Pipeline: PDF bytes -> text (deterministic) -> LLM structured extraction -> validated PurchaseOrder. */
 export class LlmExtractor implements Extractor {

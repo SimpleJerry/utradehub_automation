@@ -24,6 +24,20 @@ function fakeLlm(value: unknown): LlmProvider {
   };
 }
 
+/** Captures the system + prompt passed to the LLM so we can assert their contents. */
+function capturingLlm(value: unknown): { provider: LlmProvider; system: () => string } {
+  let captured = "";
+  return {
+    provider: {
+      generateObject<T>(_schema: z.ZodType<T>, system: string, prompt: string): Promise<T> {
+        captured = `${system}\n${prompt}`;
+        return Promise.resolve(value as T);
+      },
+    },
+    system: () => captured,
+  };
+}
+
 const pdf = new Uint8Array([1, 2, 3]);
 
 describe("LlmExtractor", () => {
@@ -49,5 +63,14 @@ describe("LlmExtractor", () => {
     const extractor = new LlmExtractor(fakePdfText("text"), fakeLlm(bad));
     const result = await extractor.extract({ sourceFile: "a.pdf", pdf });
     expect(result.ok).toBe(false);
+  });
+
+  // OpenAI-compatible JSON mode (DeepSeek included) rejects the request unless the prompt
+  // contains the word "json". Guard that the extraction prompt always instructs JSON output.
+  it("instructs the model to return JSON", async () => {
+    const llm = capturingLlm(goodFields);
+    const extractor = new LlmExtractor(fakePdfText("text"), llm.provider);
+    await extractor.extract({ sourceFile: "a.pdf", pdf });
+    expect(llm.system().toLowerCase()).toContain("json");
   });
 });
