@@ -12,6 +12,12 @@ export interface ExtractionFailure {
   error: string;
 }
 
+/** A previewed row that submit would silently skip, with the failing field identifiers. */
+export interface DroppedLineItem {
+  description: string;
+  reasons: string[];
+}
+
 export interface GroupPreview {
   groupKey: string;
   payToVendorNameEn: string | null;
@@ -21,6 +27,8 @@ export interface GroupPreview {
   lineItems: LineItem[];
   isValid: boolean;
   missingFields: string[];
+  /** Rows shown in `lineItems` that buildSubmissionPlan will drop (empty when all submit). */
+  droppedLineItems: DroppedLineItem[];
 }
 
 export interface PreviewResult {

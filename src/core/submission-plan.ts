@@ -1,3 +1,4 @@
+import { isSubmittableLineItem } from "./line-item.js";
 import type { SubmissionRecord } from "./model.js";
 
 export interface SubmissionDefaults {
@@ -37,20 +38,13 @@ export function buildSubmissionPlan(
   defaults: SubmissionDefaults,
 ): SubmissionPlan {
   const hsCode = record.hsCode ?? "";
-  const lineItems: LineItemPlan[] = record.lineItems
-    .filter(
-      (item) =>
-        item.description.trim() !== "" &&
-        Number.isFinite(item.quantity) &&
-        Number.isFinite(item.unitPrice),
-    )
-    .map((item) => ({
-      hsCode,
-      productName: buildProductName(item.description.trim(), item.docNumber),
-      unitPrice: String(item.unitPrice),
-      quantity: String(item.quantity),
-      purchaseDate: item.documentDate ?? "",
-    }));
+  const lineItems: LineItemPlan[] = record.lineItems.filter(isSubmittableLineItem).map((item) => ({
+    hsCode,
+    productName: buildProductName(item.description.trim(), item.docNumber),
+    unitPrice: String(item.unitPrice),
+    quantity: String(item.quantity),
+    purchaseDate: item.documentDate ?? "",
+  }));
 
   return {
     supplierKeyword: record.supplierNameKo ?? "",

@@ -1,4 +1,5 @@
 import { groupBySupplier } from "../core/grouping.js";
+import { lineItemRejections } from "../core/line-item.js";
 import type { PurchaseOrder, SupplierGroup } from "../core/model.js";
 import { applyVendorMapping, type VendorMapping } from "../core/vendor-mapping.js";
 import { validateForSubmission } from "../core/validation.js";
@@ -33,6 +34,9 @@ export type ProgressEvent =
 
 export function toGroupPreview(group: SupplierGroup): GroupPreview {
   const validation = validateForSubmission(group);
+  const droppedLineItems = group.lineItems
+    .map((item) => ({ description: item.description, reasons: lineItemRejections(item) }))
+    .filter((dropped) => dropped.reasons.length > 0);
   return {
     groupKey: group.groupKey,
     payToVendorNameEn: group.payToVendorNameEn,
@@ -42,6 +46,7 @@ export function toGroupPreview(group: SupplierGroup): GroupPreview {
     lineItems: group.lineItems,
     isValid: validation.isValid,
     missingFields: validation.missingFields,
+    droppedLineItems,
   };
 }
 

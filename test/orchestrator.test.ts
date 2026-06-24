@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { previewBatch, submitBatch } from "../src/app/orchestrator.js";
+import { previewBatch, submitBatch, toGroupPreview } from "../src/app/orchestrator.js";
 import type { PurchaseOrder, SupplierGroup } from "../src/core/model.js";
 import { err, ok } from "../src/core/result.js";
 import { parseVendorMapping } from "../src/adapters/vendor-mapping-loader.js";
@@ -52,6 +52,38 @@ describe("previewBatch", () => {
     });
     expect(outcome.result.extractionFailures).toHaveLength(1);
     expect(outcome.result.groups).toHaveLength(0);
+  });
+});
+
+describe("toGroupPreview", () => {
+  function group(lineItems: SupplierGroup["lineItems"]): SupplierGroup {
+    return {
+      groupKey: "skin medience",
+      payToVendorNameEn: "Skin Medience",
+      supplierNameKo: "스킨메디언스",
+      hsCode: "3916909000",
+      lineItems,
+      sourceFiles: ["a.pdf"],
+    };
+  }
+
+  it("has no dropped line items when every row is submittable", () => {
+    const preview = toGroupPreview(group([{ description: "Widget", quantity: 2, unitPrice: 50 }]));
+    expect(preview.droppedLineItems).toEqual([]);
+  });
+
+  it("flags rows the draft will silently drop, even though the group still validates", () => {
+    const preview = toGroupPreview(
+      group([
+        { description: "Widget", quantity: 2, unitPrice: 50 },
+        { description: "No quantity", quantity: Number.NaN, unitPrice: 5 },
+      ]),
+    );
+    // The group passes (`.some()` finds a valid row) yet a row is silently dropped at submit.
+    expect(preview.isValid).toBe(true);
+    expect(preview.droppedLineItems).toEqual([
+      { description: "No quantity", reasons: ["quantity"] },
+    ]);
   });
 });
 
