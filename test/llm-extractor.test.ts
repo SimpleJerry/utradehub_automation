@@ -73,4 +73,16 @@ describe("LlmExtractor", () => {
     await extractor.extract({ sourceFile: "a.pdf", pdf });
     expect(llm.system().toLowerCase()).toContain("json");
   });
+
+  // In json_object mode the schema is only advisory, so the model paraphrases prose field
+  // names (e.g. "blanketPurchaseOrderNumber") instead of the exact schema keys. Pin the prompt
+  // to name the precise JSON keys so the output matches ExtractedFieldsSchema.
+  it("names the exact schema keys in the prompt", async () => {
+    const llm = capturingLlm(goodFields);
+    const extractor = new LlmExtractor(fakePdfText("text"), llm.provider);
+    await extractor.extract({ sourceFile: "a.pdf", pdf });
+    for (const key of ["bpoNo", "documentDate", "payToVendorNameEn", "lineItems"]) {
+      expect(llm.system()).toContain(key);
+    }
+  });
 });
