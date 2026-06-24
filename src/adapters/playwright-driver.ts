@@ -51,7 +51,7 @@ export class PlaywrightDriver implements BrowserDriver {
       at("select_supplier");
       await this.selectSupplier(page, plan);
       at("fill_line_items");
-      await this.fillLineItems(page, plan);
+      await this.fillLineItems(page, plan, label);
       at("save");
       const result = await this.saveDraft(page);
       this.log(`[${label}] ✓ saved: ${JSON.stringify(result)}`);
@@ -91,6 +91,19 @@ export class PlaywrightDriver implements BrowserDriver {
     }
     await writeFile(join(dir, `${safe}_main.html`), await page.content()).catch(() => undefined);
     this.log(`[${label}] artifacts → ${dir}  (prefix ${safe})`);
+  }
+
+  /** Opt-in (UTH_DIAG=1) screenshot + HTML of one page, for reverse-engineering site behaviour. */
+  private async snapshot(page: Page, tag: string): Promise<void> {
+    const dir = process.env.UTH_DIAG_DIR ?? join(process.cwd(), ".diagnostics");
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safe = `${stamp}_${tag.replace(/[^\w.-]+/g, "_")}`;
+    await page
+      .screenshot({ path: join(dir, `${safe}.png`), fullPage: true })
+      .catch(() => undefined);
+    await writeFile(join(dir, `${safe}.html`), await page.content()).catch(() => undefined);
+    this.log(`snapshot → ${safe}.{png,html}`);
   }
 
   private role(scope: Page | Frame, selector: RoleSelector, exact = false): Locator {
@@ -190,7 +203,7 @@ export class PlaywrightDriver implements BrowserDriver {
     await popup.close();
   }
 
-  private async fillLineItems(page: Page, plan: SubmissionPlan): Promise<void> {
+  private async fillLineItems(page: Page, plan: SubmissionPlan, label: string): Promise<void> {
     if (plan.lineItems.length === 0) return;
     const frame = await this.mainFrame(page);
     const [popup] = await Promise.all([
@@ -199,10 +212,23 @@ export class PlaywrightDriver implements BrowserDriver {
     ]);
     await popup.waitForLoadState("domcontentloaded");
 
+    // Log + dismiss every dialog the item popup raises. If "add" pops a confirm (e.g. a
+    // duplicate-HS "추가하시겠습니까?"), dismissing it silently drops the item — the suspected
+    // cause of N-of-M line items going missing. Logging reveals whether that is happening.
+    popup.on("dialog", (d: Dialog) => {
+      this.log(`[${label}] item dialog: "${d.message().replace(/\s+/g, " ").trim()}"`);
+      void d.dismiss();
+    });
+
+    let i = 0;
     for (const item of plan.lineItems) {
+      i += 1;
+      this.log(
+        `[${label}] add item ${i}/${plan.lineItems.length}: ` +
+          `hs=${item.hsCode} name="${item.productName}" qty=${item.quantity} price=${item.unitPrice}`,
+      );
       await popup.locator(siteContract.items.hsInput).fill(item.hsCode);
       await this.role(popup, siteContract.items.nameInput).fill(item.productName);
-      popup.once("dialog", (d: Dialog) => void d.dismiss());
       await this.role(popup, siteContract.items.unitPriceInput).fill(item.unitPrice);
       await popup.locator(siteContract.items.unitQuantitySelect).selectOption("EA");
       await popup.locator(siteContract.items.quantityUnitSelect).selectOption("EA");
@@ -211,6 +237,7 @@ export class PlaywrightDriver implements BrowserDriver {
         await this.role(popup, siteContract.items.purchaseDateInput).fill(item.purchaseDate);
       }
       await popup.locator(siteContract.items.addButton).click();
+      if (process.env.UTH_DIAG === "1") await this.snapshot(popup, `${label}_items_after_${i}`);
     }
 
     await this.role(popup, siteContract.items.closeButton).click();
