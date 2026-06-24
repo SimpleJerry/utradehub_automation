@@ -17,7 +17,10 @@ function openBrowser(url: string): void {
 
 async function main(): Promise<void> {
   const app = buildServer(createProductionDeps());
-  const webDist = join(dirname(fileURLToPath(import.meta.url)), "../../../web/dist");
+  // In dev, web/dist sits at repo root relative to this module. The packaged build sets
+  // WEB_DIST_DIR to the bundled frontend location (the source layout differs there).
+  const webDist =
+    process.env.WEB_DIST_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "../../../web/dist");
   await app.register(fastifyStatic, { root: webDist });
   await app.listen({ port, host: "127.0.0.1" });
   const url = `http://127.0.0.1:${port}`;

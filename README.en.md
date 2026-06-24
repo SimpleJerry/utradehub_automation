@@ -35,8 +35,8 @@ utradehub_automation/
 ├─ examples/       # vendor_mapping.example.csv and other templates
 ├─ docs/           # ARCHITECTURE.md
 ├─ openspec/       # specs (specs/) and change history (changes/archive/)
-├─ .env.example
-└─ run.bat         # one-click launch (= npm run start)
+├─ packaging/      # Windows installer build (esbuild + Inno Setup)
+└─ .env.example    # developer gated integration test only
 ```
 
 ## 3. Supplier mapping CSV (fixed columns)
@@ -52,12 +52,16 @@ See the template at [`examples/vendor_mapping.example.csv`](./examples/vendor_ma
 
 ## 4. Run / delivery (for a non-technical operator)
 
-1. One-time setup: `npm install && npm run build`.
-2. Double-click `run.bat` (equivalent to `npm run start`) — it starts the local service and opens the browser.
-3. In the UI: provide the LLM config (optional) and the supplier-mapping CSV, select PDFs → "dry-run preview" → review each group → enter this session's login id/password (**memory only, not saved**) → tick to confirm → "confirm and run" → see the result report.
+The operator needs **no Node or Docker**:
+
+1. Run the installer `UTradeHubAutomationSetup.exe` (per-user, no admin).
+2. Double-click the **UTradeHub Automation** desktop/Start-menu icon — it starts the local service and opens the browser.
+3. In the UI: **upload** the supplier-mapping CSV, enter the **LLM API Key** (memory only, not saved), select PDFs → "dry-run preview" → review each group → enter this session's login id/password (**memory only, not saved**) → tick to confirm → "confirm and run" → see the result report.
 4. The tool only reaches 임시저장 drafts; review on uTradeHub and have a person do the final 발급.
 
-**Prerequisites:** Chrome installed on the operator's system; LLM configured (`.env`: `LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`); mapping CSV ready. The UI / `checkEnvironment()` summarizes blockers before a run.
+**Prerequisites:** Chrome installed on the operator's system; the LLM API key is entered in the UI at run time (model/base have defaults, overridable under "advanced"); mapping CSV ready. The UI summarizes environment blockers (Chrome) before a run.
+
+**Build the installer (developers):** `npm run package` builds the frontend, bundles the backend with esbuild, ships a portable Node + production `node_modules`, then runs Inno Setup to produce `packaging/dist/UTradeHubAutomationSetup.exe`. CI builds and publishes it on `v*` tags (`.github/workflows/release.yml`).
 
 ## 5. Development
 

@@ -35,8 +35,8 @@ utradehub_automation/
 ├─ examples/       # vendor_mapping.example.csv 等模板
 ├─ docs/           # ARCHITECTURE.md
 ├─ openspec/       # 规格（specs/）与变更历史（changes/archive/）
-├─ .env.example
-└─ run.bat         # 一键启动（= npm run start）
+├─ packaging/      # Windows 安装包打包（esbuild + Inno Setup）
+└─ .env.example    # 仅开发者 gated 集成测试用
 ```
 
 ## 3. 供应商映射 CSV（固定列）
@@ -52,12 +52,16 @@ Skin Medience,스킨메디언스,3916909000
 
 ## 4. 运行 / 交付（面向非技术操作员）
 
-1. 一次性准备：`npm install && npm run build`。
-2. 双击 `run.bat`（等价于 `npm run start`）——启动本地服务并自动打开浏览器。
-3. 在界面里：填 LLM 配置（可选）与供应商映射 CSV、选 PDF →「干跑预览」→ 核对每组 → 输入本次登录账号密码（**仅内存、不保存**）→ 勾选确认 →「确认并运行」→ 看结果报告。
+操作员**无需安装 Node 或 Docker**：
+
+1. 运行安装包 `UTradeHubAutomationSetup.exe` 完成安装（per-user，无需管理员）。
+2. 双击桌面/开始菜单的 **UTradeHub Automation** 图标——启动本地服务并自动打开浏览器。
+3. 在界面里：**上传**供应商映射 CSV、填 **LLM API Key**（仅内存、不保存）、选 PDF →「干跑预览」→ 核对每组 → 输入本次登录账号密码（**仅内存、不保存**）→ 勾选确认 →「确认并运行」→ 看结果报告。
 4. 程序只建到 임시저장 草稿；请到 uTradeHub 复核后再由人正式 발급。
 
-**运行前提**：操作员系统已装 Chrome；已配置 LLM（`.env`：`LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`）；映射 CSV 就绪。界面/`checkEnvironment()` 会在运行前汇总阻断项。
+**运行前提**：操作员系统已装 Chrome；运行时在界面录入 LLM API Key（model/base 有默认值，可在“高级”覆盖）；映射 CSV 就绪。运行前界面会汇总环境阻断项（Chrome）。
+
+**打包安装包（开发者）**：`npm run package` 构建前端、用 esbuild 打包后端，附带便携 Node 与生产 `node_modules`，再用 Inno Setup 产出 `packaging/dist/UTradeHubAutomationSetup.exe`。CI 在打 `v*` tag 时自动出包并发布到 release（`.github/workflows/release.yml`）。
 
 ## 5. 开发
 

@@ -1,0 +1,29 @@
+name: Release
+
+# Push a tag like v1.0.0 to build and publish the Windows installer.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        run: npm run package
+      - name: Publish installer to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packaging/dist/UTradeHubAutomationSetup.exe

@@ -35,8 +35,8 @@ utradehub_automation/
 ├─ examples/       # vendor_mapping.example.csv 등 템플릿
 ├─ docs/           # ARCHITECTURE.md
 ├─ openspec/       # 스펙(specs/)과 변경 이력(changes/archive/)
-├─ .env.example
-└─ run.bat         # 원클릭 실행(= npm run start)
+├─ packaging/      # Windows 설치 패키지 빌드(esbuild + Inno Setup)
+└─ .env.example    # 개발자 gated 통합 테스트 전용
 ```
 
 ## 3. 공급사 매핑 CSV (고정 컬럼)
@@ -52,12 +52,16 @@ Skin Medience,스킨메디언스,3916909000
 
 ## 4. 실행 / 배포 (비기술 운영자용)
 
-1. 1회 준비: `npm install && npm run build`.
-2. `run.bat` 더블클릭(= `npm run start`) — 로컬 서비스를 시작하고 브라우저를 자동으로 엽니다.
-3. UI에서: LLM 설정(선택)과 공급사 매핑 CSV 입력, PDF 선택 → "드라이런 미리보기" → 각 그룹 확인 → 이번 세션 로그인 아이디/비밀번호 입력(**메모리 전용, 저장 안 함**) → 확인 체크 → "확인 후 실행" → 결과 리포트 확인.
+운영자는 **Node나 Docker가 필요 없습니다**:
+
+1. 설치 패키지 `UTradeHubAutomationSetup.exe`를 실행해 설치합니다(per-user, 관리자 권한 불필요).
+2. 바탕화면/시작 메뉴의 **UTradeHub Automation** 아이콘을 더블클릭 — 로컬 서비스가 시작되고 브라우저가 자동으로 열립니다.
+3. UI에서: 공급사 매핑 CSV **업로드**, **LLM API Key** 입력(메모리 전용, 저장 안 함), PDF 선택 → "드라이런 미리보기" → 각 그룹 확인 → 이번 세션 로그인 아이디/비밀번호 입력(**메모리 전용, 저장 안 함**) → 확인 체크 → "확인 후 실행" → 결과 리포트 확인.
 4. 도구는 임시저장 초안까지만 만듭니다. uTradeHub에서 검토한 뒤 사람이 최종 발급을 진행하세요.
 
-**사전 조건:** 운영자 시스템에 Chrome 설치; LLM 설정(`.env`: `LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`); 매핑 CSV 준비. 실행 전 UI / `checkEnvironment()`가 차단 항목을 요약합니다.
+**사전 조건:** 운영자 시스템에 Chrome 설치; LLM API Key는 실행 시 UI에서 입력(model/base는 기본값 있음, "고급"에서 재정의 가능); 매핑 CSV 준비. 실행 전 UI가 환경 차단 항목(Chrome)을 요약합니다.
+
+**설치 패키지 빌드(개발자):** `npm run package`가 프런트엔드 빌드, esbuild로 백엔드 번들, 휴대용 Node + 프로덕션 `node_modules` 동봉 후 Inno Setup으로 `packaging/dist/UTradeHubAutomationSetup.exe`를 생성합니다. CI는 `v*` 태그에서 자동 빌드/배포합니다(`.github/workflows/release.yml`).
 
 ## 5. 개발
 
