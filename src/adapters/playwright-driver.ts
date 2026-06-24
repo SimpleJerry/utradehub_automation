@@ -362,22 +362,33 @@ export class PlaywrightDriver implements BrowserDriver {
   }
 
   private async saveDraft(page: Page): Promise<SaveResult> {
-    const dialog: { message: string | null } = { message: null };
-    page.once("dialog", (d: Dialog) => {
-      dialog.message = d.message().trim();
-      void d.dismiss();
-    });
-
     const frame = await this.mainFrame(page);
-    await this.role(frame, siteContract.save.tempSave, true).click();
-    await page.waitForTimeout(1000);
 
-    const captured = dialog.message;
-    if (captured !== null) {
-      const success = ["저장", "완료", "성공"].some((token) => captured.includes(token));
-      const refMatch = /\d{6,}/.exec(captured);
-      return { success, referenceNo: refMatch ? (refMatch[0] ?? null) : null, message: captured };
+    // 임시저장 confirms via a native dialog (e.g. "…발급신청이 완료됩니다"). Arm a deterministic wait
+    // for it BEFORE the click instead of a fixed delay the postback can outlast: a slow save must
+    // never be reported as success just because a timer expired. If no dialog arrives, the save is
+    // treated as unverified (success:false) — never an optimistic success.
+    const dialogPromise = page
+      .waitForEvent("dialog", { timeout: 15000 })
+      .then(async (d: Dialog) => {
+        const message = d.message().trim();
+        await d.dismiss().catch(() => undefined);
+        return message;
+      })
+      .catch(() => null);
+
+    await this.role(frame, siteContract.save.tempSave, true).click();
+    const captured = await dialogPromise;
+
+    if (captured === null) {
+      return {
+        success: false,
+        referenceNo: null,
+        message: "임시저장: 저장 확인 대화상자가 15초 내에 나타나지 않음 (저장 미확인)",
+      };
     }
-    return { success: true, referenceNo: null, message: "임시저장 clicked (no dialog captured)" };
+    const success = ["저장", "완료", "성공"].some((token) => captured.includes(token));
+    const refMatch = /\d{6,}/.exec(captured);
+    return { success, referenceNo: refMatch ? (refMatch[0] ?? null) : null, message: captured };
   }
 }
