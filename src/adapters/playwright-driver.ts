@@ -12,6 +12,7 @@ import type { SubmissionRecord } from "../core/model.js";
 import { err, ok, type Result } from "../core/result.js";
 import { buildSubmissionPlan, type SubmissionPlan } from "../core/submission-plan.js";
 import type { BrowserDriver, SaveResult, SiteCredentials } from "../ports/browser-driver.js";
+import { numericValueDiffers } from "./field-value.js";
 import { SITE_DEFAULTS, siteContract, type RoleSelector } from "./site-contract.js";
 
 type AriaRole = Parameters<Page["getByRole"]>[0];
@@ -147,6 +148,32 @@ export class PlaywrightDriver implements BrowserDriver {
     if ((await field.inputValue().catch(() => "")).trim() === "") {
       await field.fill(value).catch(() => undefined);
     }
+  }
+
+  /**
+   * Re-assert a numeric field to `value` when a late recalc echo changed it. The 단가/수량 fields
+   * are overwritten by setSumAmt's async callback with a server echo; a recalc fired while 수량 was
+   * still empty echoes qty=1 and, landing late, collapses a typed 100 → 1. Comparison ignores the
+   * site's own thousands separators so its formatting never triggers a needless refill.
+   */
+  private async ensureNumericValue(field: Locator, value: string): Promise<void> {
+    if (numericValueDiffers(await field.inputValue().catch(() => ""), value)) {
+      await field.fill(value).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Wait for the line-item amount recalc (setSumAmt → retrieveETSCnfrmPrchLItemAmt.do) and any
+   * blockUI postback to settle, so a late server echo can no longer overwrite a field after we set
+   * it. Both waits are best-effort: an already-idle popup resolves immediately.
+   */
+  private async settleRecalc(popup: Page): Promise<void> {
+    await popup
+      .locator(".blockUI.blockOverlay")
+      .first()
+      .waitFor({ state: "hidden", timeout: 8000 })
+      .catch(() => undefined);
+    await popup.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => undefined);
   }
 
   private role(scope: Page | Frame, selector: RoleSelector, exact = false): Locator {
@@ -285,21 +312,39 @@ export class PlaywrightDriver implements BrowserDriver {
       if (item.purchaseDate) {
         await this.role(popup, siteContract.items.purchaseDateInput).fill(item.purchaseDate);
       }
-      // Backstop (defense in depth): re-fill any required field a late-arriving reset may have
-      // wiped before committing, so a row is never rejected for a blank HS/단가/수량/품명.
+      // The 단가/수량 onblur each fire setSumAmt → an async amount recalc whose callback echoes the
+      // server-normalised value back into the field. A recalc fired while 수량 was still empty (the
+      // 단가 onblur fires one before we type quantity) echoes qty=1 and, landing late, overwrites
+      // the quantity we just typed (100 → 1). Let every pending recalc settle first, so that stale
+      // echo lands now…
+      await this.settleRecalc(popup);
+
+      // …then re-assert the row. HS/품명 are only restored when blanked (the site reformats 품명, so
+      // never fight its value); 단가/수량 are corrected whenever they differ from the intended number,
+      // which catches the echo-clobber that leaves a non-empty but wrong value.
       await this.refillIfEmpty(popup.locator(siteContract.items.hsInput), item.hsCode);
       await this.refillIfEmpty(this.role(popup, siteContract.items.nameInput), item.productName);
-      await this.refillIfEmpty(this.role(popup, siteContract.items.unitPriceInput), item.unitPrice);
-      await this.refillIfEmpty(
-        this.role(popup, siteContract.items.quantityInput, true),
-        item.quantity,
+      await this.ensureNumericValue(
+        this.role(popup, siteContract.items.unitPriceInput),
+        item.unitPrice,
       );
+      const qtyField = this.role(popup, siteContract.items.quantityInput, true);
+      await this.ensureNumericValue(qtyField, item.quantity);
+
+      // Re-fire the recalc with the corrected quantity (also recomputing 금액) and let its now-correct
+      // echo land, so no stale setSumAmt response is left in flight to clobber 수량 before we commit.
+      await qtyField.focus().catch(() => undefined);
+      await qtyField.blur().catch(() => undefined);
+      await this.settleRecalc(popup);
 
       if (process.env.UTH_DIAG === "1") {
         const alerts = await popup.evaluate(
           () => (window as unknown as { __alerts?: string[] }).__alerts ?? [],
         );
         this.log(`[${label}] item ${i} pre-add alerts = ${JSON.stringify(alerts)}`);
+        this.log(
+          `[${label}] item ${i} pre-add qty="${await qtyField.inputValue().catch(() => "")}"`,
+        );
       }
 
       await popup.locator(siteContract.items.addButton).click();
