@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   chromium,
   type Browser,
@@ -25,29 +27,70 @@ export class PlaywrightDriver implements BrowserDriver {
     credentials: SiteCredentials,
   ): Promise<Result<SaveResult>> {
     const plan = buildSubmissionPlan(record, SITE_DEFAULTS);
+    const label = record.supplierNameKo ?? record.payToVendorNameEn ?? record.groupKey;
     let browser: Browser | undefined;
+    let page: Page | undefined;
     let step = "launch";
+    const at = (s: string): void => {
+      step = s;
+      this.log(`[${label}] → ${s}`);
+    };
     try {
+      at("launch");
       browser = await chromium.launch({ channel: "chrome", headless: false });
-      const page = await (await browser.newContext()).newPage();
+      page = await (await browser.newContext()).newPage();
+      // Diagnostics: surface every popup the site throws (notices, session conflicts, pickers).
+      page.on("popup", (p) => this.log(`[${label}] popup opened: ${p.url()}`));
 
-      step = "login";
+      at("login");
       await this.login(page, credentials);
-      step = "open_form";
+      at("open_form");
       await this.openForm(page);
-      step = "fill_basic_info";
+      at("fill_basic_info");
       await this.fillBasicInfo(page, plan);
-      step = "select_supplier";
+      at("select_supplier");
       await this.selectSupplier(page, plan);
-      step = "fill_line_items";
+      at("fill_line_items");
       await this.fillLineItems(page, plan);
-      step = "save";
-      return ok(await this.saveDraft(page));
+      at("save");
+      const result = await this.saveDraft(page);
+      this.log(`[${label}] ✓ saved: ${JSON.stringify(result)}`);
+      return ok(result);
     } catch (error) {
+      await this.captureFailure(page, label, step).catch(() => undefined);
+      this.log(`[${label}] ✗ failed at ${step}: ${String(error)}`);
       return err(`site_flow_error[${step}]: ${String(error)}`);
     } finally {
       await browser?.close();
     }
+  }
+
+  private log(message: string): void {
+    // stderr so it interleaves into the server console without being mistaken for app output.
+    console.error(`[playwright ${new Date().toISOString()}] ${message}`);
+  }
+
+  /**
+   * On a flow failure, snapshot every open page (main form + any lingering popup) plus the main
+   * page's HTML into a local, git-ignored diagnostics folder. This is the only window into what
+   * the live site actually did — which popup appeared, where a click misfired — without a human
+   * watching the browser. May contain on-screen account/supplier data, so it never leaves disk.
+   */
+  private async captureFailure(page: Page | undefined, label: string, step: string): Promise<void> {
+    if (!page) return;
+    const dir = process.env.UTH_DIAG_DIR ?? join(process.cwd(), ".diagnostics");
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safe = `${stamp}_${label.replace(/[^\w.-]+/g, "_")}_${step}`;
+    const pages = page.context().pages();
+    for (const [i, p] of pages.entries()) {
+      const name = i === 0 ? "main" : `popup${i}`;
+      await p
+        .screenshot({ path: join(dir, `${safe}_${name}.png`), fullPage: true })
+        .catch(() => undefined);
+    }
+    await writeFile(join(dir, `${safe}_main.html`), await page.content()).catch(() => undefined);
+    this.log(`[${label}] artifacts → ${dir}  (prefix ${safe})`);
   }
 
   private role(scope: Page | Frame, selector: RoleSelector, exact = false): Locator {

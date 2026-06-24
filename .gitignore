@@ -12,6 +12,9 @@ dist/
 build/
 web/dist/
 
+# playwright failure diagnostics (screenshots/HTML may contain account & supplier data)
+.diagnostics/
+
 # local vendor mapping (do not commit private mapping data)
 examples/vendor_mapping.*
 !examples/vendor_mapping.example.csv
