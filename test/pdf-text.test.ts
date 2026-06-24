@@ -16,4 +16,14 @@ describe("UnpdfTextExtractor", () => {
     const text = await new UnpdfTextExtractor().extractText(pdf);
     expect(text).toContain("Hello uTradeHub");
   });
+
+  // The web server decodes uploads with Buffer.from(base64), yielding a Node Buffer.
+  // unpdf rejects Buffer ("Please provide binary data as Uint8Array, rather than Buffer"),
+  // so the adapter must accept a Buffer too.
+  it("extracts text when given a Node Buffer", async () => {
+    const pdf = await makePdf("Buffer path works");
+    const buffer = Buffer.from(pdf);
+    const text = await new UnpdfTextExtractor().extractText(buffer);
+    expect(text).toContain("Buffer path works");
+  });
 });
