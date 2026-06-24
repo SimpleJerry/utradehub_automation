@@ -212,9 +212,19 @@ export class PlaywrightDriver implements BrowserDriver {
     ]);
     await popup.waitForLoadState("domcontentloaded");
 
-    // Log + dismiss every dialog the item popup raises. If "add" pops a confirm (e.g. a
-    // duplicate-HS "추가하시겠습니까?"), dismissing it silently drops the item — the suspected
-    // cause of N-of-M line items going missing. Logging reveals whether that is happening.
+    // Root cause of N-of-M line items being silently dropped: entering a long 품명 (>35 bytes)
+    // fires a *blocking* alert("…한 줄에는 최대 35 Byte…"). A native alert freezes the page's JS
+    // thread and races with the following fills, intermittently leaving 단가 empty so "add" is
+    // rejected ("금액을 입력해주세요") and the row vanishes. Replace alert with a non-blocking
+    // recorder so the fill sequence is deterministic; the messages are still readable for diag.
+    await popup.evaluate(() => {
+      const recorded: string[] = [];
+      (window as unknown as { __alerts: string[] }).__alerts = recorded;
+      window.alert = (message?: string): void => {
+        recorded.push(String(message));
+      };
+    });
+    // confirm()/non-alert dialogs still surface through Playwright; log and dismiss them.
     popup.on("dialog", (d: Dialog) => {
       this.log(`[${label}] item dialog: "${d.message().replace(/\s+/g, " ").trim()}"`);
       void d.dismiss();
@@ -236,8 +246,22 @@ export class PlaywrightDriver implements BrowserDriver {
       if (item.purchaseDate) {
         await this.role(popup, siteContract.items.purchaseDateInput).fill(item.purchaseDate);
       }
+      // Backstop: confirm the validated field still holds its value before committing the row.
+      const price = this.role(popup, siteContract.items.unitPriceInput);
+      if ((await price.inputValue()).trim() === "") await price.fill(item.unitPrice);
+
       await popup.locator(siteContract.items.addButton).click();
-      if (process.env.UTH_DIAG === "1") await this.snapshot(popup, `${label}_items_after_${i}`);
+      // Let the AJAX add commit before the next entry (and before the final 닫기) to avoid a
+      // separate add-not-committed race, especially on the last row.
+      await popup.waitForTimeout(400);
+
+      if (process.env.UTH_DIAG === "1") {
+        const alerts = await popup.evaluate(
+          () => (window as unknown as { __alerts?: string[] }).__alerts ?? [],
+        );
+        this.log(`[${label}] after add ${i}: alerts so far = ${JSON.stringify(alerts)}`);
+        await this.snapshot(popup, `${label}_items_after_${i}`);
+      }
     }
 
     await this.role(popup, siteContract.items.closeButton).click();
