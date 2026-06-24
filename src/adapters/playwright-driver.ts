@@ -106,6 +106,49 @@ export class PlaywrightDriver implements BrowserDriver {
     this.log(`snapshot → ${safe}.{png,html}`);
   }
 
+  /**
+   * Keep the site's blocking native alert non-blocking. A long 품명 (>35 bytes) fires
+   * alert("…한 줄에는 최대 35 Byte…"), which freezes the page's JS thread and races with the
+   * remaining fills. Replacing window.alert with a recorder makes the fill sequence deterministic
+   * and still captures the messages for diagnostics. The popup reloads the entry row on every add
+   * (reverting alert to native), so this must be re-applied before each row.
+   */
+  private async installAlertRecorder(popup: Page): Promise<void> {
+    await popup
+      .evaluate(() => {
+        const w = window as unknown as { __alerts?: string[] };
+        const recorded = Array.isArray(w.__alerts) ? w.__alerts : (w.__alerts = []);
+        window.alert = (message?: string): void => {
+          recorded.push(String(message));
+        };
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * 저장/추가 commits a row via a jQuery blockUI ("Loading…") postback that reloads the entry
+   * fields. Filling the next row while that reload is in flight lands on a doomed DOM and is
+   * silently wiped (HS/단가 end up empty → "…를 입력해주세요" → the row is dropped). Wait for the
+   * overlay to clear and the HS field to be editable again before touching the next row. A flat
+   * delay was too short — the reload routinely outlasts it — which was dropping items.
+   */
+  private async waitForItemFormReady(popup: Page): Promise<void> {
+    const overlay = popup.locator(".blockUI.blockOverlay").first();
+    await overlay.waitFor({ state: "visible", timeout: 2000 }).catch(() => undefined);
+    await overlay.waitFor({ state: "hidden", timeout: 20000 }).catch(() => undefined);
+    await popup
+      .locator(siteContract.items.hsInput)
+      .waitFor({ state: "visible", timeout: 20000 })
+      .catch(() => undefined);
+  }
+
+  /** Re-fill a required field a late reset may have wiped, so a row is never rejected blank. */
+  private async refillIfEmpty(field: Locator, value: string): Promise<void> {
+    if ((await field.inputValue().catch(() => "")).trim() === "") {
+      await field.fill(value).catch(() => undefined);
+    }
+  }
+
   private role(scope: Page | Frame, selector: RoleSelector, exact = false): Locator {
     return scope.getByRole(selector.role as AriaRole, { name: selector.name, exact });
   }
@@ -212,27 +255,23 @@ export class PlaywrightDriver implements BrowserDriver {
     ]);
     await popup.waitForLoadState("domcontentloaded");
 
-    // Root cause of N-of-M line items being silently dropped: entering a long 품명 (>35 bytes)
-    // fires a *blocking* alert("…한 줄에는 최대 35 Byte…"). A native alert freezes the page's JS
-    // thread and races with the following fills, intermittently leaving 단가 empty so "add" is
-    // rejected ("금액을 입력해주세요") and the row vanishes. Replace alert with a non-blocking
-    // recorder so the fill sequence is deterministic; the messages are still readable for diag.
-    await popup.evaluate(() => {
-      const recorded: string[] = [];
-      (window as unknown as { __alerts: string[] }).__alerts = recorded;
-      window.alert = (message?: string): void => {
-        recorded.push(String(message));
-      };
-    });
-    // confirm()/non-alert dialogs still surface through Playwright; log and dismiss them.
+    // Native dialogs that slip past the in-page recorder (a server-side rejection like
+    // "HS부호를 입력해주세요", or an alert fired before the recorder is installed) still surface
+    // through Playwright; log and dismiss them so they can never block the flow.
     popup.on("dialog", (d: Dialog) => {
       this.log(`[${label}] item dialog: "${d.message().replace(/\s+/g, " ").trim()}"`);
       void d.dismiss();
     });
 
+    // The popup can show the blockUI overlay on first load too; wait before the first fill.
+    await this.waitForItemFormReady(popup);
+
     let i = 0;
     for (const item of plan.lineItems) {
       i += 1;
+      // Each add reloads the entry row, reverting window.alert to native — reinstall the
+      // recorder on the freshly-loaded document before typing the long 품명.
+      await this.installAlertRecorder(popup);
       this.log(
         `[${label}] add item ${i}/${plan.lineItems.length}: ` +
           `hs=${item.hsCode} name="${item.productName}" qty=${item.quantity} price=${item.unitPrice}`,
@@ -246,20 +285,29 @@ export class PlaywrightDriver implements BrowserDriver {
       if (item.purchaseDate) {
         await this.role(popup, siteContract.items.purchaseDateInput).fill(item.purchaseDate);
       }
-      // Backstop: confirm the validated field still holds its value before committing the row.
-      const price = this.role(popup, siteContract.items.unitPriceInput);
-      if ((await price.inputValue()).trim() === "") await price.fill(item.unitPrice);
-
-      await popup.locator(siteContract.items.addButton).click();
-      // Let the AJAX add commit before the next entry (and before the final 닫기) to avoid a
-      // separate add-not-committed race, especially on the last row.
-      await popup.waitForTimeout(400);
+      // Backstop (defense in depth): re-fill any required field a late-arriving reset may have
+      // wiped before committing, so a row is never rejected for a blank HS/단가/수량/품명.
+      await this.refillIfEmpty(popup.locator(siteContract.items.hsInput), item.hsCode);
+      await this.refillIfEmpty(this.role(popup, siteContract.items.nameInput), item.productName);
+      await this.refillIfEmpty(this.role(popup, siteContract.items.unitPriceInput), item.unitPrice);
+      await this.refillIfEmpty(
+        this.role(popup, siteContract.items.quantityInput, true),
+        item.quantity,
+      );
 
       if (process.env.UTH_DIAG === "1") {
         const alerts = await popup.evaluate(
           () => (window as unknown as { __alerts?: string[] }).__alerts ?? [],
         );
-        this.log(`[${label}] after add ${i}: alerts so far = ${JSON.stringify(alerts)}`);
+        this.log(`[${label}] item ${i} pre-add alerts = ${JSON.stringify(alerts)}`);
+      }
+
+      await popup.locator(siteContract.items.addButton).click();
+      // Wait for the blockUI postback/reload to fully settle before the next row (or 닫기),
+      // instead of a flat delay the reload can outlast — the core fix for dropped rows.
+      await this.waitForItemFormReady(popup);
+
+      if (process.env.UTH_DIAG === "1") {
         await this.snapshot(popup, `${label}_items_after_${i}`);
       }
     }
