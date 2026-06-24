@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   fetchEnvironment,
   preview,
@@ -19,6 +19,16 @@ function toBase64(buffer: ArrayBuffer): string {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
+
+/** Group separators so amounts are scannable; keeps the decimals the model returned. */
+function fmtNumber(n: number): string {
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
+const cell: CSSProperties = { border: "1px solid #ddd", padding: "4px 8px", textAlign: "left" };
+const cellNum: CSSProperties = { ...cell, textAlign: "right", whiteSpace: "nowrap" };
+const headCell: CSSProperties = { ...cell, background: "#f5f5f5", fontWeight: 600 };
+const headCellNum: CSSProperties = { ...headCell, textAlign: "right" };
 
 export function App() {
   const [phase, setPhase] = useState<Phase>("config");
@@ -205,39 +215,64 @@ export function App() {
             </div>
           )}
           {groups.length === 0 && <p>没有可预览的分组——请查看上面的解析失败原因。</p>}
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <thead>
-              <tr>
-                <th>批准</th>
-                <th>供应商</th>
-                <th>HS</th>
-                <th>行项目</th>
-                <th>校验</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((g) => (
-                <tr key={g.groupKey}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      disabled={!g.isValid}
-                      checked={approved[g.groupKey] ?? false}
-                      onChange={(e) =>
-                        setApproved((a) => ({ ...a, [g.groupKey]: e.target.checked }))
-                      }
-                    />
-                  </td>
-                  <td>{g.supplierNameKo ?? g.payToVendorNameEn ?? g.groupKey}</td>
-                  <td>{g.hsCode ?? "-"}</td>
-                  <td>{g.lineItems.length}</td>
-                  <td style={{ color: g.isValid ? "#070" : "#b00" }}>
-                    {g.isValid ? "OK" : `缺: ${g.missingFields.join(",")}`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {groups.map((g) => (
+            <div
+              key={g.groupKey}
+              style={{
+                border: "1px solid #ccc",
+                borderRadius: 6,
+                padding: "0.6rem 0.75rem",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    disabled={!g.isValid}
+                    checked={approved[g.groupKey] ?? false}
+                    onChange={(e) => setApproved((a) => ({ ...a, [g.groupKey]: e.target.checked }))}
+                  />
+                  批准
+                </label>
+                <strong style={{ fontSize: "1.05em" }}>
+                  {g.supplierNameKo ?? g.payToVendorNameEn ?? g.groupKey}
+                </strong>
+                {g.supplierNameKo !== null && g.payToVendorNameEn !== null && (
+                  <span style={{ color: "#666" }}>（{g.payToVendorNameEn}）</span>
+                )}
+                <span>HS: {g.hsCode ?? "—"}</span>
+                <span style={{ color: g.isValid ? "#070" : "#b00", fontWeight: 600 }}>
+                  {g.isValid ? "✓ 校验通过" : `✗ 缺字段: ${g.missingFields.join("、")}`}
+                </span>
+                <span style={{ color: "#888", marginLeft: "auto", fontSize: "0.9em" }}>
+                  {g.lineItems.length} 行 · 来源 {g.sourceFiles.join("、")}
+                </span>
+              </div>
+              <table style={{ borderCollapse: "collapse", width: "100%", marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th style={headCell}>单据号</th>
+                    <th style={headCell}>单据日期</th>
+                    <th style={headCell}>品名</th>
+                    <th style={headCellNum}>数量</th>
+                    <th style={headCellNum}>单价</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.lineItems.map((item, i) => (
+                    <tr key={`${g.groupKey}#${i}`}>
+                      <td style={cell}>{item.docNumber ?? "—"}</td>
+                      <td style={cell}>{item.documentDate ?? "—"}</td>
+                      <td style={cell}>{item.description}</td>
+                      <td style={cellNum}>{fmtNumber(item.quantity)}</td>
+                      <td style={cellNum}>{fmtNumber(item.unitPrice)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
           <h3>登录（仅本次会话，不保存）</h3>
           <input
             placeholder="账号"

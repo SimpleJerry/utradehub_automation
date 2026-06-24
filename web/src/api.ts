@@ -3,13 +3,23 @@ export interface EnvIssue {
   message: string;
 }
 
+export interface PreviewLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  // Provenance stamped during grouping; present on real extractions, optional for safety.
+  docNumber?: string;
+  documentDate?: string;
+  sourceFile?: string;
+}
+
 export interface GroupPreview {
   groupKey: string;
   payToVendorNameEn: string | null;
   supplierNameKo: string | null;
   hsCode: string | null;
   sourceFiles: string[];
-  lineItems: { description: string; quantity: number; unitPrice: number }[];
+  lineItems: PreviewLineItem[];
   isValid: boolean;
   missingFields: string[];
 }

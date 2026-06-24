@@ -67,4 +67,40 @@ describe("App", () => {
     await runPreview();
     expect(await screen.findByText(/mapping_parse_failed: bad header/)).toBeTruthy();
   });
+
+  // The dry run exists so the operator can verify the extracted content before any draft is
+  // created. A line-item COUNT is not enough — the actual description / quantity / unit price /
+  // source document must be visible for review.
+  it("shows each extracted line item's content for review", async () => {
+    vi.mocked(preview).mockResolvedValueOnce({
+      sessionId: "s1",
+      groups: [
+        {
+          groupKey: "acme",
+          payToVendorNameEn: "Acme",
+          supplierNameKo: "에이씨엠이",
+          hsCode: "1234",
+          sourceFiles: ["po.pdf"],
+          lineItems: [
+            {
+              description: "CANNULA COG 360",
+              quantity: 350,
+              unitPrice: 65247.6,
+              docNumber: "PBO-00007960",
+              documentDate: "2026-04-27",
+            },
+          ],
+          isValid: true,
+          missingFields: [],
+        },
+      ],
+      extractionFailures: [],
+    });
+    render(<App />);
+    await runPreview();
+    expect(await screen.findByText(/CANNULA COG 360/)).toBeTruthy();
+    expect(await screen.findByText("350")).toBeTruthy();
+    expect(await screen.findByText(/65,?247/)).toBeTruthy();
+    expect(await screen.findByText(/PBO-00007960/)).toBeTruthy();
+  });
 });
