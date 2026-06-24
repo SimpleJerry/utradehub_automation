@@ -1,9 +1,39 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.js";
+import { preview } from "./api.js";
 
-afterEach(cleanup);
+vi.mock("./api.js", () => ({
+  preview: vi.fn(),
+  run: vi.fn(),
+  fetchEnvironment: vi.fn(() => Promise.resolve([])),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+/** Fill mapping CSV, API key, and one PDF so the "干跑预览" button enables, then click it. */
+async function runPreview() {
+  const csv = new File(
+    ["vendor_name_en,supplier_name_ko,hs_code\nAcme,에이씨엠이,1234"],
+    "map.csv",
+    {
+      type: "text/csv",
+    },
+  );
+  const pdf = new File([new Uint8Array([1, 2, 3])], "bad.pdf", { type: "application/pdf" });
+  fireEvent.change(screen.getByLabelText("供应商映射 CSV"), { target: { files: [csv] } });
+  fireEvent.change(screen.getByLabelText("LLM API Key"), { target: { value: "sk-test" } });
+  fireEvent.change(document.querySelector('input[accept="application/pdf"]')!, {
+    target: { files: [pdf] },
+  });
+  const button = screen.getByRole("button", { name: "干跑预览" }) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+}
 
 describe("App", () => {
   it("renders the config step with mapping upload and LLM key fields", () => {
@@ -17,5 +47,24 @@ describe("App", () => {
     render(<App />);
     const button = screen.getByRole("button", { name: "干跑预览" }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
+  });
+
+  it("shows per-file extraction failures returned by the preview", async () => {
+    vi.mocked(preview).mockResolvedValueOnce({
+      sessionId: "s1",
+      groups: [],
+      extractionFailures: [{ sourceFile: "bad.pdf", error: "empty_pdf_text" }],
+    });
+    render(<App />);
+    await runPreview();
+    expect(await screen.findByText(/bad\.pdf/)).toBeTruthy();
+    expect(await screen.findByText(/empty_pdf_text/)).toBeTruthy();
+  });
+
+  it("surfaces a mapping/parse error instead of crashing the page", async () => {
+    vi.mocked(preview).mockResolvedValueOnce({ error: "mapping_parse_failed: bad header" });
+    render(<App />);
+    await runPreview();
+    expect(await screen.findByText(/mapping_parse_failed: bad header/)).toBeTruthy();
   });
 });

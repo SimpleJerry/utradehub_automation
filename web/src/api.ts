@@ -14,11 +14,15 @@ export interface GroupPreview {
   missingFields: string[];
 }
 
-export interface PreviewResponse {
-  sessionId: string;
-  groups: GroupPreview[];
-  extractionFailures: { sourceFile: string; error: string }[];
+export interface ExtractionFailure {
+  sourceFile: string;
+  error: string;
 }
+
+/** Success carries groups + per-file failures; a mapping/parse error returns only `error`. */
+export type PreviewResponse =
+  | { sessionId: string; groups: GroupPreview[]; extractionFailures: ExtractionFailure[] }
+  | { error: string };
 
 export interface GroupOutcome {
   groupKey: string;

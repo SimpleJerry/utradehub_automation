@@ -6,6 +6,7 @@ import {
   type BatchReport,
   type Credentials,
   type EnvIssue,
+  type ExtractionFailure,
   type GroupPreview,
   type PdfUpload,
 } from "./api.js";
@@ -30,6 +31,7 @@ export function App() {
   const [pdfs, setPdfs] = useState<PdfUpload[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [groups, setGroups] = useState<GroupPreview[]>([]);
+  const [extractionFailures, setExtractionFailures] = useState<ExtractionFailure[]>([]);
   const [approved, setApproved] = useState<Record<string, boolean>>({});
   const [confirmed, setConfirmed] = useState(false);
   const [credentials, setCredentials] = useState<Credentials>({
@@ -67,8 +69,13 @@ export function App() {
         model: llmModel || undefined,
         baseUrl: llmBaseUrl || undefined,
       });
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
       setSessionId(result.sessionId);
       setGroups(result.groups);
+      setExtractionFailures(result.extractionFailures);
       setApproved(
         Object.fromEntries(result.groups.filter((g) => g.isValid).map((g) => [g.groupKey, true])),
       );
@@ -185,6 +192,19 @@ export function App() {
       {phase === "preview" && (
         <section>
           <h2>2. 干跑预览（确认后才会驱动）</h2>
+          {extractionFailures.length > 0 && (
+            <div role="alert" style={{ color: "#b00", marginBottom: 8 }}>
+              <p>以下文件解析失败，未纳入预览（请检查文件本身或 LLM 配置）：</p>
+              <ul>
+                {extractionFailures.map((f) => (
+                  <li key={f.sourceFile}>
+                    {f.sourceFile}: {f.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {groups.length === 0 && <p>没有可预览的分组——请查看上面的解析失败原因。</p>}
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
               <tr>
