@@ -212,17 +212,31 @@ export class PlaywrightDriver implements BrowserDriver {
     return target.dispatchEvent("click").then(() => popupPromise);
   }
 
+  /**
+   * Close any popups the site throws (terms agreement, notices, session-conflict warnings) within a
+   * bounded idle window. A popup left open overlays the form, so subsequent clicks/fills land on the
+   * wrong target — the most likely cause of the post-login "everything is offset" symptom. The old
+   * code closed exactly one popup; this drains however many appear, then stops once none arrive
+   * within `idleMs`.
+   */
+  private async drainPopups(page: Page, idleMs = 2500, max = 6): Promise<void> {
+    for (let n = 0; n < max; n += 1) {
+      let popup: Page;
+      try {
+        popup = await page.context().waitForEvent("page", { timeout: idleMs });
+      } catch {
+        return; // no further popup within the idle window
+      }
+      await popup.close().catch(() => undefined);
+    }
+  }
+
   private async login(page: Page, credentials: SiteCredentials): Promise<void> {
     await page.goto(credentials.baseUrl);
     await page.getByPlaceholder(siteContract.login.idPlaceholder).fill(credentials.username);
     await page.getByPlaceholder(siteContract.login.passwordPlaceholder).fill(credentials.password);
     await this.role(page, siteContract.login.submit, true).click();
-    try {
-      const popup = await page.context().waitForEvent("page", { timeout: 3000 });
-      await popup.close();
-    } catch {
-      // No login popup appeared.
-    }
+    await this.drainPopups(page);
     await page.waitForLoadState("domcontentloaded");
   }
 
