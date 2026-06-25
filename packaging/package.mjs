@@ -14,6 +14,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -21,6 +22,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
+const { version: appVersion } = JSON.parse(
+  readFileSync(join(repo, "package.json"), "utf8"),
+);
 const buildDir = join(repo, "packaging", "build");
 const appDir = join(buildDir, "app");
 const stageDir = join(buildDir, ".stage");
@@ -82,7 +86,11 @@ if (!process.argv.includes("--no-installer")) {
   }
   // No shell here: ISCC.exe lives under a path with spaces, and shell:true would only
   // concatenate (not quote) the args, breaking the path. execFileSync handles it directly.
-  execFileSync(iscc, [join(repo, "packaging", "installer.iss")], {
+  // /DMyAppVersion=x.y.z injects the version from package.json into the installer script.
+  execFileSync(iscc, [
+    `/DMyAppVersion=${appVersion}`,
+    join(repo, "packaging", "installer.iss"),
+  ], {
     cwd: join(repo, "packaging"),
     stdio: "inherit",
   });

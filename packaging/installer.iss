@@ -3,7 +3,12 @@
 ; Build with: ISCC.exe packaging\installer.iss  (driven by `npm run package`).
 
 #define AppName "UTradeHub Automation"
-#define AppVersion "0.0.0"
+; AppVersion is injected at build time via: ISCC /DMyAppVersion=x.y.z
+; When compiling standalone (no /D flag), falls back to "0.0.0".
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
+#define AppVersion MyAppVersion
 
 [Setup]
 AppName={#AppName}
