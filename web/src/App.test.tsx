@@ -126,9 +126,7 @@ describe("App", () => {
           ],
           isValid: true,
           missingFields: [],
-          droppedLineItems: [
-            { description: "GADGET B", reasons: ["quantity", "unitPrice"] },
-          ],
+          droppedLineItems: [{ description: "GADGET B", reasons: ["quantity", "unitPrice"] }],
         },
       ],
       extractionFailures: [],
