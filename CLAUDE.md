@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-## 하네스 / Harness: uTradeHub 关务自动化
+## Harness: uTradeHub 关务自动化
 
 **目标:** 把 uTradeHub 自动化项目（PDF→LLM抽取→人工门→Playwright填韩国关务门户）的开发任务，路由给专才 agent 团队并集成，守住人工门（永不自动 발급/제출）。
 
