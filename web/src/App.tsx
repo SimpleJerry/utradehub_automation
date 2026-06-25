@@ -5,6 +5,7 @@ import {
   run,
   type BatchReport,
   type Credentials,
+  type DroppedLineItem,
   type EnvIssue,
   type ExtractionFailure,
   type GroupPreview,
@@ -249,6 +250,31 @@ export function App() {
                   {g.lineItems.length} 行 · 来源 {g.sourceFiles.join("、")}
                 </span>
               </div>
+              {g.droppedLineItems.length > 0 && (
+                <div
+                  role="alert"
+                  style={{
+                    color: "#b00",
+                    background: "#fff5f5",
+                    border: "1px solid #f5c6c6",
+                    borderRadius: 4,
+                    padding: "6px 10px",
+                    marginTop: 8,
+                    marginBottom: 4,
+                  }}
+                >
+                  <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>
+                    以下行项目提交时会被跳过，不会进入草稿（请核对）：
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    {g.droppedLineItems.map((d: DroppedLineItem, i: number) => (
+                      <li key={`${g.groupKey}-dropped-${i}`}>
+                        {d.description}（缺失字段：{d.reasons.join("、")}）
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <table style={{ borderCollapse: "collapse", width: "100%", marginTop: 8 }}>
                 <thead>
                   <tr>

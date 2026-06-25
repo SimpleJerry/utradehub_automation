@@ -13,6 +13,11 @@ export interface PreviewLineItem {
   sourceFile?: string;
 }
 
+export interface DroppedLineItem {
+  description: string;
+  reasons: string[];
+}
+
 export interface GroupPreview {
   groupKey: string;
   payToVendorNameEn: string | null;
@@ -22,6 +27,8 @@ export interface GroupPreview {
   lineItems: PreviewLineItem[];
   isValid: boolean;
   missingFields: string[];
+  /** Rows that buildSubmissionPlan will silently skip; empty when all rows will submit. */
+  droppedLineItems: DroppedLineItem[];
 }
 
 export interface ExtractionFailure {

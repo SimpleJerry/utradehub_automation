@@ -92,6 +92,7 @@ describe("App", () => {
           ],
           isValid: true,
           missingFields: [],
+          droppedLineItems: [],
         },
       ],
       extractionFailures: [],
@@ -102,5 +103,43 @@ describe("App", () => {
     expect(await screen.findByText("350")).toBeTruthy();
     expect(await screen.findByText(/65,?247/)).toBeTruthy();
     expect(await screen.findByText(/PBO-00007960/)).toBeTruthy();
+  });
+
+  it("shows dropped line items per group with alert role", async () => {
+    vi.mocked(preview).mockResolvedValueOnce({
+      sessionId: "s2",
+      groups: [
+        {
+          groupKey: "betacorp",
+          payToVendorNameEn: "BetaCorp",
+          supplierNameKo: "베타코프",
+          hsCode: "5678",
+          sourceFiles: ["invoice.pdf"],
+          lineItems: [
+            {
+              description: "WIDGET A",
+              quantity: 10,
+              unitPrice: 100,
+              docNumber: "INV-001",
+              documentDate: "2026-05-01",
+            },
+          ],
+          isValid: true,
+          missingFields: [],
+          droppedLineItems: [
+            { description: "GADGET B", reasons: ["quantity", "unitPrice"] },
+          ],
+        },
+      ],
+      extractionFailures: [],
+    });
+    render(<App />);
+    await runPreview();
+    const alerts = await screen.findAllByRole("alert");
+    const droppedAlert = alerts.find((el) => el.textContent?.includes("GADGET B"));
+    expect(droppedAlert).toBeTruthy();
+    expect(droppedAlert?.textContent).toMatch(/quantity/);
+    expect(droppedAlert?.textContent).toMatch(/unitPrice/);
+    expect(droppedAlert?.textContent).toMatch(/以下行项目提交时会被跳过/);
   });
 });
