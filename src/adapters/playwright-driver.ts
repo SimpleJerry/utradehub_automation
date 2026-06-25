@@ -12,7 +12,7 @@ import type { SubmissionRecord } from "../core/model.js";
 import { err, ok, type Result } from "../core/result.js";
 import { buildSubmissionPlan, type SubmissionPlan } from "../core/submission-plan.js";
 import type { BrowserDriver, SaveResult, SiteCredentials } from "../ports/browser-driver.js";
-import { numericValueDiffers } from "./field-value.js";
+import { numericValueDiffers, totalsArePopulated } from "./field-value.js";
 import { SITE_DEFAULTS, siteContract, type RoleSelector } from "./site-contract.js";
 
 type AriaRole = Parameters<Page["getByRole"]>[0];
@@ -53,6 +53,8 @@ export class PlaywrightDriver implements BrowserDriver {
       await this.selectSupplier(page, plan);
       at("fill_line_items");
       await this.fillLineItems(page, plan, label);
+      at("settle_totals");
+      await this.waitForFormTotals(page, label, plan.lineItems.length);
       at("save");
       const result = await this.saveDraft(page);
       this.log(`[${label}] ✓ saved: ${JSON.stringify(result)}`);
@@ -174,6 +176,116 @@ export class PlaywrightDriver implements BrowserDriver {
       .waitFor({ state: "hidden", timeout: 8000 })
       .catch(() => undefined);
     await popup.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => undefined);
+  }
+
+  /**
+   * After the line-item popup closes, the main form's 총수량/총금액 are NOT written by the popup
+   * directly. The popup calls `opener.window["fnc_linepop"]()` on each add and on 닫기 — a callback
+   * that runs in the parent (the mainFrame hosting viewForm) and ASYNCHRONOUSLY fetches+recomputes
+   * the totals from the server, then populates viewForm.totQty / viewForm.totAmt (and the FrgnAmt /
+   * Wchrg fields). 임시저장 must not post until that callback has landed, or blank totals are saved —
+   * the live-reproduced bug. This is the same "automation outruns the site's async callback" race as
+   * settleRecalc / waitForItemFormReady, so it is fixed the same way: a condition-based poll, never a
+   * flat sleep.
+   *
+   * Invariant enforced here: once the popup has added N rows, viewForm.totQty AND viewForm.totAmt
+   * must both be present and non-zero before we proceed. (We can't assert an exact total — the server
+   * computes it — but a blank/zero total after adding rows is the failure we are guarding against, so
+   * `totalsArePopulated` makes the dropped-totals bug surface as a timeout here rather than silently
+   * at save.)
+   *
+   * Best-effort and never throws: a populated value is the only success condition, and on timeout the
+   * flow still continues to saveDraft (whose own dialog check decides success) after logging decisive
+   * evidence. If the first poll finds the totals still blank, we re-fire the read-only `fnc_linepop`
+   * refresh once and keep polling — covering the "the 닫기-triggered call was lost" sub-hypothesis.
+   * This touches no submit path: fnc_linepop only refreshes totals.
+   */
+  private async waitForFormTotals(page: Page, label: string, rowCount: number): Promise<void> {
+    if (rowCount === 0) return;
+    const { qtyField, amtField, frgnAmtField, callback } = siteContract.totals;
+
+    // Read the two gating totals off the parent form. Mirrors the popup's
+    // `opener.document.viewForm.totQty.value`. Wrapped so a transient frame detach never throws.
+    const readTotals = async (): Promise<{ totQty: string; totAmt: string }> => {
+      try {
+        const frame = await this.mainFrame(page);
+        return await frame.evaluate(
+          ([qty, amt]) => {
+            const form = (document as unknown as { viewForm?: Record<string, { value?: string }> })
+              .viewForm;
+            const get = (name: string): string => form?.[name]?.value ?? "";
+            return { totQty: get(qty), totAmt: get(amt) };
+          },
+          [qtyField, amtField] as const,
+        );
+      } catch {
+        return { totQty: "", totAmt: "" };
+      }
+    };
+
+    const retrigger = async (): Promise<void> => {
+      try {
+        const frame = await this.mainFrame(page);
+        await frame.evaluate((name) => {
+          try {
+            const fn = (window as unknown as Record<string, unknown>)[name];
+            if (typeof fn === "function") (fn as () => void)();
+          } catch {
+            /* read-only total refresh; ignore */
+          }
+        }, callback);
+      } catch {
+        /* never throw out of the wait */
+      }
+    };
+
+    const start = Date.now();
+    const deadline = start + 15000;
+    let retriggered = false;
+    let last = { totQty: "", totAmt: "" };
+    while (Date.now() < deadline) {
+      last = await readTotals();
+      if (totalsArePopulated(last.totQty, last.totAmt)) {
+        this.log(`[${label}] totals: totQty="${last.totQty}" totAmt="${last.totAmt}"`);
+        return;
+      }
+      // Defensive: if the close-triggered callback was lost, re-fire it once (after a short grace so
+      // a callback already in flight gets a chance to land first), then keep polling.
+      if (!retriggered && Date.now() - start > 2000) {
+        retriggered = true;
+        await retrigger();
+      }
+      // Condition-based wait: re-read on the site's own readiness, not a fixed end-of-step sleep.
+      await page.waitForLoadState("networkidle", { timeout: 1500 }).catch(() => undefined);
+    }
+
+    // Failure path only: capture decisive evidence to disambiguate "race" vs "callback name changed".
+    this.log(
+      `[${label}] totals NOT populated after wait: totQty="${last.totQty}" totAmt="${last.totAmt}"`,
+    );
+    try {
+      const frame = await this.mainFrame(page);
+      const evidence = await frame.evaluate(
+        ([qty, amt, frgn, cb]) => {
+          const form = (document as unknown as { viewForm?: Record<string, { value?: string }> })
+            .viewForm;
+          const get = (name: string): string => form?.[name]?.value ?? "<no-field>";
+          return {
+            callbackType: typeof (window as unknown as Record<string, unknown>)[cb],
+            totQty: get(qty),
+            totAmt: get(amt),
+            totFrgnAmt: get(frgn),
+          };
+        },
+        [qtyField, amtField, frgnAmtField, callback] as const,
+      );
+      this.log(
+        `[${label}] totals diag: typeof ${callback}=${evidence.callbackType} ` +
+          `totQty="${evidence.totQty}" totAmt="${evidence.totAmt}" totFrgnAmt="${evidence.totFrgnAmt}"`,
+      );
+    } catch (error) {
+      this.log(`[${label}] totals diag read failed: ${String(error)}`);
+    }
   }
 
   private role(scope: Page | Frame, selector: RoleSelector, exact = false): Locator {

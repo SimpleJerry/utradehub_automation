@@ -54,4 +54,19 @@ export const siteContract = {
   save: {
     tempSave: { role: "button", name: "임시저장" } satisfies RoleSelector,
   },
+  /**
+   * Main-form (viewForm) total fields the line-item popup populates ASYNCHRONOUSLY via its parent
+   * callback `fnc_linepop`. Confirmed from the popup DOM, which reads them as
+   * `opener.document.viewForm.totQty.value` etc. (ETSCnfrmPrchLItemCP). The driver must wait for
+   * totQty/totAmt to land before 임시저장, or blank totals are saved. Field names — not CSS IDs —
+   * because the popup addresses them by the named form control on `document.viewForm`.
+   */
+  totals: {
+    callback: "fnc_linepop",
+    qtyField: "totQty",
+    amtField: "totAmt",
+    frgnAmtField: "totFrgnAmt",
+    wchrgAmtField: "totalWchrgAmt",
+    wchrgFrgnAmtField: "totalWchrgFrgnAmt",
+  },
 } as const;
