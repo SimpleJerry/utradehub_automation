@@ -247,6 +247,7 @@ export class PlaywrightDriver implements BrowserDriver {
       last = await readTotals();
       if (totalsArePopulated(last.totQty, last.totAmt)) {
         this.log(`[${label}] totals: totQty="${last.totQty}" totAmt="${last.totAmt}"`);
+        await this.dumpTotalsDiag(page, label);
         return;
       }
       // Defensive: if the close-triggered callback was lost, re-fire it once (after a short grace so
@@ -286,6 +287,75 @@ export class PlaywrightDriver implements BrowserDriver {
     } catch (error) {
       this.log(`[${label}] totals diag read failed: ${String(error)}`);
     }
+    await this.dumpTotalsDiag(page, label);
+  }
+
+  /**
+   * UTH_DIAG-only, strictly read-only deep dump to pin down WHERE the saved totals actually live.
+   * Live evidence: the saved draft has blank 총수량/총금액 even though the user SEES totals on the
+   * form — so the visible number is likely a DISPLAY element while the field 임시저장 posts
+   * (document.viewForm.totQty/totAmt) stays empty, OR the real total field has a different name. This
+   * gathers the decisive evidence (the callback's own source + every tot/sum/qty/amt control + the
+   * display-span vs field split) without changing anything. Runs on BOTH the success and timeout
+   * paths so we get the form's real total DOM either way. Never throws; touches no submit/발급/제출.
+   */
+  private async dumpTotalsDiag(page: Page, label: string): Promise<void> {
+    if (process.env.UTH_DIAG !== "1") return;
+    const { callback } = siteContract.totals;
+    try {
+      const frame = await this.mainFrame(page);
+      const dump = await frame.evaluate((cb) => {
+        const out: {
+          callbackSrc: string;
+          controls: string[];
+          displayVsField: string[];
+        } = { callbackSrc: "<not a function>", controls: [], displayVsField: [] };
+
+        // 1. The callback's own source reveals exactly which element/field it writes.
+        const fn = (window as unknown as Record<string, unknown>)[cb];
+        if (typeof fn === "function") {
+          out.callbackSrc = (fn as () => void).toString().slice(0, 3000);
+        }
+
+        // 2. Sweep every control (incl. hidden) inside document.viewForm whose name or id looks
+        //    total-ish, to surface the REAL field if it isn't named totQty/totAmt.
+        const form = (document as unknown as { viewForm?: HTMLFormElement }).viewForm;
+        if (form) {
+          const re = /tot|sum|qty|amt/i;
+          for (const el of Array.from(form.elements)) {
+            const c = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+            const name = c.name ?? "";
+            const id = c.id ?? "";
+            if (re.test(name) || re.test(id)) {
+              out.controls.push(`${name}|${id}=${String(c.value)}`);
+            }
+          }
+        }
+
+        // 3. Display spans (id=totQty / id=totAmt) textContent vs the form field .value — confirms
+        //    the suspected display-vs-field split.
+        for (const elId of ["totQty", "totAmt"]) {
+          const node = document.getElementById(elId);
+          const display = node ? (node.textContent ?? "").replace(/\s+/g, " ").trim() : "<no-el>";
+          const fieldVal =
+            form && (form as unknown as Record<string, { value?: string }>)[elId]
+              ? ((form as unknown as Record<string, { value?: string }>)[elId]?.value ?? "")
+              : "<no-field>";
+          out.displayVsField.push(`#${elId}: display="${display}" field.value="${fieldVal}"`);
+        }
+        return out;
+      }, callback);
+
+      this.log(
+        `[${label}] totals diag deep: ${callback}.toString()=${JSON.stringify(dump.callbackSrc)}`,
+      );
+      this.log(`[${label}] totals diag controls: ${JSON.stringify(dump.controls)}`);
+      this.log(`[${label}] totals diag display-vs-field: ${JSON.stringify(dump.displayVsField)}`);
+    } catch (error) {
+      this.log(`[${label}] totals diag deep read failed: ${String(error)}`);
+    }
+    // 4. Main-page HTML/PNG snapshot so the totals DOM region can be inspected directly.
+    await this.snapshot(page, `${label}_mainform_totals`).catch(() => undefined);
   }
 
   private role(scope: Page | Frame, selector: RoleSelector, exact = false): Locator {
