@@ -39,7 +39,22 @@ export class PlaywrightDriver implements BrowserDriver {
     try {
       at("launch");
       browser = await chromium.launch({ channel: "chrome", headless: false });
-      page = await (await browser.newContext()).newPage();
+      const context = await browser.newContext();
+      // tsx/esbuild runs with keepNames, which wraps named inner functions inside our
+      // frame.evaluate/page.evaluate callbacks (e.g. readTotals' `const get = …`) with a `__name(…)`
+      // helper whose definition lives at the module top level. Playwright serializes only the
+      // callback BODY into the page, not that top-level helper, so `__name` is undefined there →
+      // "ReferenceError: __name is not defined". Each affected evaluate then throws and is swallowed
+      // by its own try/catch — silently breaking every read: readTotals always returned empty, so the
+      // totals wait timed out for 15s and blank 총수량/총금액 were saved. A context-level init script
+      // defines a harmless identity __name shim in every page/frame/popup before any of our scripts
+      // run, so the wrapped callbacks execute correctly. It MUST be a string literal — esbuild never
+      // rewrites string contents, so the shim itself can't be __name-wrapped and crash recursively —
+      // and it MUST be injected before login/openForm navigate.
+      await context.addInitScript(
+        "globalThis.__name = globalThis.__name || function (fn) { return fn; };",
+      );
+      page = await context.newPage();
       // Diagnostics: surface every popup the site throws (notices, session conflicts, pickers).
       page.on("popup", (p) => this.log(`[${label}] popup opened: ${p.url()}`));
 
