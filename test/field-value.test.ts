@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { numericValueDiffers, totalsArePopulated } from "../src/adapters/field-value.js";
+import {
+  isIssuanceConfirmation,
+  numericValueDiffers,
+  totalsArePopulated,
+} from "../src/adapters/field-value.js";
 
 describe("numericValueDiffers", () => {
   it("treats a server-echoed thousands-separated value as equal", () => {
@@ -46,5 +50,30 @@ describe("totalsArePopulated", () => {
 
   it("reads the site's thousands-separated totals as populated", () => {
     expect(totalsArePopulated("1,234", "1,234,567.89")).toBe(true);
+  });
+});
+
+describe("isIssuanceConfirmation", () => {
+  it("lets a declarative notice that merely mentions 전송/발급 through (not a question)", () => {
+    // The do-this-later instruction shown DURING the save flow: it mentions the issuance tokens but is
+    // a statement, not an are-you-sure ask — dismissing it would needlessly cancel the legitimate save.
+    const notice =
+      "- 세금계산서 정보 미입력시에는 …(세금계산서 정보)을 등록하여야 합니다. " +
+      "- 목록 화면에서 반드시 [전송]버튼을 누르셔야 발급신청이 완료됩니다";
+    expect(isIssuanceConfirmation(notice)).toBe(false);
+  });
+
+  it("flags interrogative issuance prompts (must be dismissed at the human gate)", () => {
+    expect(isIssuanceConfirmation("발급하시겠습니까?")).toBe(true);
+    expect(isIssuanceConfirmation("제출하시겠어요?")).toBe(true);
+    expect(isIssuanceConfirmation("전송할까요?")).toBe(true);
+  });
+
+  it("lets a 임시저장 confirm through — 저장 is not an issuance term", () => {
+    expect(isIssuanceConfirmation("임시저장 하시겠습니까?")).toBe(false);
+  });
+
+  it("lets a save-completed notice through", () => {
+    expect(isIssuanceConfirmation("저장되었습니다")).toBe(false);
   });
 });

@@ -12,7 +12,7 @@ import type { SubmissionRecord } from "../core/model.js";
 import { err, ok, type Result } from "../core/result.js";
 import { buildSubmissionPlan, type SubmissionPlan } from "../core/submission-plan.js";
 import type { BrowserDriver, SaveResult, SiteCredentials } from "../ports/browser-driver.js";
-import { numericValueDiffers, totalsArePopulated } from "./field-value.js";
+import { isIssuanceConfirmation, numericValueDiffers, totalsArePopulated } from "./field-value.js";
 import { SITE_DEFAULTS, siteContract, type RoleSelector } from "./site-contract.js";
 
 type AriaRole = Parameters<Page["getByRole"]>[0];
@@ -575,31 +575,88 @@ export class PlaywrightDriver implements BrowserDriver {
   private async saveDraft(page: Page): Promise<SaveResult> {
     const frame = await this.mainFrame(page);
 
-    // 임시저장 confirms via a native dialog (e.g. "…발급신청이 완료됩니다"). Arm a deterministic wait
-    // for it BEFORE the click instead of a fixed delay the postback can outlast: a slow save must
-    // never be reported as success just because a timer expired. If no dialog arrives, the save is
-    // treated as unverified (success:false) — never an optimistic success.
-    const dialogPromise = page
-      .waitForEvent("dialog", { timeout: 15000 })
-      .then(async (d: Dialog) => {
-        const message = d.message().trim();
-        await d.dismiss().catch(() => undefined);
-        return message;
-      })
-      .catch(() => null);
+    // 임시저장 fires a SEQUENCE of native dialogs, not just one: typically a confirm/notice that gates
+    // the main-form POST (총수량/총금액 included), then trailing completion alert(s). The previous
+    // one-shot `waitForEvent(...).dismiss()` saw only the first dialog and DISMISSED it — i.e. clicked
+    // 취소 on that gating confirm — so the main-form POST was cancelled and the header totals were never
+    // saved, even though the draft + line-item rows (built by the popup's own server calls) already
+    // existed → the live "rows present, totals blank" bug. Fix: a PERSISTENT page.on("dialog") that
+    // drains the WHOLE sequence and ACCEPTS (확인) each save-flow dialog so the POST actually commits.
+    // Armed BEFORE the click (a click that triggers a blocking confirm() does not resolve until the
+    // dialog is handled) and removed in `finally`.
+    const messages: string[] = [];
+    let blockedIssuance = false;
+    let firstSeen: () => void = () => undefined;
+    const firstDialog = new Promise<void>((resolve) => {
+      firstSeen = resolve;
+    });
 
-    await this.role(frame, siteContract.save.tempSave, true).click();
-    const captured = await dialogPromise;
+    const onDialog = (d: Dialog): void => {
+      const type = d.type();
+      // Collapse all whitespace (incl. the multi-line bullet notices) to single spaces for a 1-line log.
+      const message = d.message().replace(/\s+/g, " ").trim();
+      messages.push(message);
+      firstSeen();
 
-    if (captured === null) {
-      return {
-        success: false,
-        referenceNo: null,
-        message: "임시저장: 저장 확인 대화상자가 15초 내에 나타나지 않음 (저장 미확인)",
-      };
+      // HUMAN-GATE RED LINE: never confirm a dialog that ASKS to actually issue/submit/transmit. Only an
+      // INTERROGATIVE issuance prompt is dangerous — accepting it would FILE the application. A
+      // DECLARATIVE notice that merely MENTIONS those terms (e.g. the "must press the [send] button to
+      // complete the application" do-this-later instruction shown DURING the save flow) is closed so the
+      // save proceeds. The discrimination lives in `isIssuanceConfirmation` (field-value.ts), unit-tested.
+      if (isIssuanceConfirmation(message)) {
+        blockedIssuance = true;
+        this.log(
+          `[save] ⚠ WARNING: dialog(${type}) is an issuance-style question — ` +
+            `dismissed per human gate, never accepted: "${message}"`,
+        );
+        void d.dismiss().catch(() => undefined);
+        return;
+      }
+      this.log(`[save] dialog(${type}) → accept(확인): "${message}"`);
+      void d.accept().catch(() => undefined);
+    };
+    page.on("dialog", onDialog);
+
+    try {
+      await this.role(frame, siteContract.save.tempSave, true).click();
+
+      // Required semantic: at least one dialog must arrive within 15s. None ⇒ the save is UNVERIFIED
+      // (success:false), never reported optimistically just because the timer expired. `firstDialog`
+      // (set by the handler above, armed before the click) also catches a confirm fired synchronously
+      // DURING the click. The deadline is a plain timer — NOT page.waitForTimeout (a race-masking sleep)
+      // and NOT a second waitForEvent dialog listener (which, left dangling, could observe a late dialog
+      // without accepting it and freeze the page). It is only the explicit save-verification deadline.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), 15000);
+      });
+      const sawDialog = await Promise.race([firstDialog.then(() => true), deadline]);
+      if (timer) clearTimeout(timer);
+      if (!sawDialog) {
+        return {
+          success: false,
+          referenceNo: null,
+          message: "임시저장: 저장 확인 대화상자가 15초 내에 나타나지 않음 (저장 미확인)",
+        };
+      }
+
+      // The accepted confirm fires the main-form POST. Wait for that round-trip to COMMIT on the server
+      // — and any trailing completion alert to fire (drained by the persistent handler) — on the site's
+      // own network-idle signal, never a fixed sleep. This also guarantees we do not close the browser
+      // while the save POST is still in flight. Best-effort/bounded: a quiet page resolves at once.
+      await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
+    } finally {
+      page.off("dialog", onDialog);
     }
-    const success = ["저장", "완료", "성공"].some((token) => captured.includes(token));
-    const refMatch = /\d{6,}/.exec(captured);
-    return { success, referenceNo: refMatch ? (refMatch[0] ?? null) : null, message: captured };
+
+    const combined = messages.join(" | ");
+    // Success heuristic unchanged: after a real accept the completion notice ("…저장되었습니다", etc.)
+    // joins `messages`, so the 저장/완료/성공 check lands on a genuine commit confirmation.
+    const success = ["저장", "완료", "성공"].some((token) => combined.includes(token));
+    const refMatch = /\d{6,}/.exec(combined);
+    const message = blockedIssuance
+      ? `${combined}  [HUMAN-GATE: issuance-style confirm dismissed / 인적 게이트 유지]`
+      : combined;
+    return { success, referenceNo: refMatch ? (refMatch[0] ?? null) : null, message };
   }
 }
