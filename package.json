@@ -10,8 +10,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "fix": "npm run lint:fix && npm run format",
     "agents:sync": "node scripts/sync-agent-instructions.mjs",
     "agents:check": "node scripts/sync-agent-instructions.mjs --check",
     "test": "vitest run",
