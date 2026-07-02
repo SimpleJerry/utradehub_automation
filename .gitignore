@@ -32,7 +32,5 @@ examples/vendor_mapping.*
 /.codex/hooks.json
 
 # Ruler generated startup files; edit .ruler/AGENTS.md instead
-/AGENTS.md
 /AGENTS.md.bak
-/CLAUDE.md
 /CLAUDE.md.bak
