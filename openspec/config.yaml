@@ -1,15 +1,13 @@
 schema: spec-driven
 
-context: |
-  Project memory: docs/memory/utradehub-rewrite-architecture.md.
-  uTradeHub Automation is a local 구매확인서 draft-generation tool:
-  purchase-order PDFs -> structured extraction -> vendor/HS mapping -> supplier grouping -> operator preview -> uTradeHub 임시저장 drafts.
-  Hard boundary: the tool may create 임시저장 drafts only. It must never click final 발급/제출; final issuance is always manual inside uTradeHub.
-  Credentials and secrets are per-session memory only. LLM API keys and uTradeHub login credentials must not be persisted, logged, or committed.
-  Architecture: functional core / imperative shell. src/core is pure domain logic with no I/O; src/ports defines external interfaces; src/adapters implements PDF, LLM, CSV, and Playwright/uTradeHub integrations; src/app composes workflows and Fastify server; web is the React/Vite operator UI.
-  Tech stack: Node >= 24, TypeScript ESM, Fastify, React 19, Vite, playwright-core with installed Chrome channel, unpdf, Vercel AI SDK OpenAI-compatible providers, Zod, Vitest, ESLint, Prettier, esbuild/Inno Setup packaging.
-  Quality gate: npm run verify is the single health check and must remain zero-network/zero-browser by default. Real uTradeHub tests are explicitly gated.
-  Cross-layer changes must keep core model, DTOs, UI preview/report, extractor schemas, and site automation synchronized.
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

@@ -1,6 +1,6 @@
-# uTradeHub Rewrite Architecture Memory
+# uTradeHub Automation Agent Instructions
 
-## Product Boundary
+## Project Boundary
 
 uTradeHub Automation is a local draft-generation tool for Korean `구매확인서` work:
 `purchase-order PDFs -> structured extraction -> vendor/HS mapping -> supplier grouping -> operator preview -> uTradeHub 임시저장 drafts`.
@@ -11,7 +11,7 @@ Credentials and secrets are memory-only per session. LLM API keys and uTradeHub 
 
 ## Architecture
 
-The rewrite uses functional-core / imperative-shell:
+Use functional-core / imperative-shell:
 
 - `src/core/` contains pure domain logic: typed order models, line-item normalization, vendor mapping, grouping, validation, and submission-plan construction. It has no I/O, browser, network, filesystem, clock, or environment reads.
 - `src/ports/` defines interfaces for external dependencies such as PDF text extraction, LLM extraction, and browser driving.
@@ -44,7 +44,7 @@ All side effects stay in adapters/app layers. Core behavior should be covered by
 
 ## Agent Team
 
-Use the project agent split for larger changes:
+For uTradeHub/구매확인서/关务自动化 development work, use the `utradehub-orchestrator` skill to route work across the specialist team:
 
 - `playwright-reliability`: `src/adapters/playwright-driver.ts`, `site-contract.ts`, selector/line-item reliability, race removal.
 - `extraction-eval`: PDF text, LLM extraction, model schemas, fixtures, and field-level accuracy.

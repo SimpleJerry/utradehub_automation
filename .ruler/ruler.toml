@@ -1,0 +1,11 @@
+# Ruler is the canonical source for shared agent startup instructions.
+# Edit .ruler/AGENTS.md, then regenerate local agent files with Ruler.
+
+default_agents = ["claude", "codex"]
+
+[gitignore]
+enabled = true
+local = false
+
+[backup]
+enabled = false
