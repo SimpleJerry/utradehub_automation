@@ -2,15 +2,19 @@
 .idea/
 .vscode/
 
-# env
+# env / secrets
 .env
 
-# node / typescript
+# node / typescript dependencies
 node_modules/
+
+# build and test output
 coverage/
 dist/
 build/
 web/dist/
+packaging/build/
+packaging/dist/
 
 # playwright failure diagnostics (screenshots/HTML may contain account & supplier data)
 .diagnostics/
@@ -22,11 +26,13 @@ examples/vendor_mapping.*
 # local agent worktrees
 .claude/worktrees/
 
-# START Ruler Generated Files
+# local Codex configuration generated per machine
 /.codex/config.toml
 /.codex/config.toml.bak
+/.codex/hooks.json
+
+# Ruler generated startup files; edit .ruler/AGENTS.md instead
 /AGENTS.md
 /AGENTS.md.bak
 /CLAUDE.md
 /CLAUDE.md.bak
-# END Ruler Generated Files
