@@ -1,11 +1,20 @@
 # Ruler is the canonical source for shared agent startup instructions.
 # Edit .ruler/AGENTS.md, then regenerate local agent files with Ruler.
 
+# Ruler is also the canonical source for shared project skills and subagents:
+# - .ruler/skills/ -> .claude/skills/, .agents/skills/
+# - .ruler/agents/ -> .claude/agents/, .codex/agents/
+
 default_agents = ["claude", "codex"]
 
 [gitignore]
-enabled = true
+enabled = false
 local = false
 
 [backup]
 enabled = false
+
+[agents]
+enabled = true
+cleanup_orphaned = false
+

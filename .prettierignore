@@ -31,3 +31,10 @@ README.ko.md
 README_USER.md
 README_USER.en.md
 README_USER.ko.md
+
+# ruler generated files (tracked, generated from .ruler/)
+AGENTS.md
+CLAUDE.md
+.agents/skills/
+.codex/agents/
+.ruler/agents/

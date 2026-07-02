@@ -14,18 +14,18 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "fix": "npm run lint:fix && npm run format",
-    "agents:sync": "node scripts/sync-agent-instructions.mjs",
-    "agents:check": "node scripts/sync-agent-instructions.mjs --check",
+    "agents:sync": "node scripts/sync-ruler-assets.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "verify": "npm run agents:check && npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test",
     "dev:web": "vite --config web/vite.config.ts",
     "dev:server": "tsx watch src/app/server/index.ts",
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
     "build": "vite build --config web/vite.config.ts",
     "package": "node packaging/package.mjs",
-    "start": "tsx src/app/server/index.ts"
+    "start": "tsx src/app/server/index.ts",
+    "agents:dry-run": "ruler apply --agents claude,codex --skills --subagents --dry-run --verbose"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
