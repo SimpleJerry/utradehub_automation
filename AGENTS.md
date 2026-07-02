@@ -46,4 +46,4 @@ Ruler is the single source of truth for shared agent assets:
 - Edit subagents in `.ruler/agents/`.
 - Run `npm run agents:sync` after changing any `.ruler/` agent asset.
 - Use `npm run agents:dry-run` to preview generated changes.
-Generated files such as `AGENTS.md`, `CLAUDE.md`, `.claude/skills/`, `.agents/skills/`, `.claude/agents/`, and `.codex/agents/` are tracked, but should not be edited directly.
+`AGENTS.md` is a generated generic entrypoint and should not be edited directly. Platform-specific outputs such as `CLAUDE.md`, `.claude/`, `.codex/`, and `.agents/skills/` are local generated files: regenerate them with `npm run agents:sync`, but keep them ignored and out of Git.

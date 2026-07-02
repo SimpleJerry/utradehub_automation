@@ -32,9 +32,9 @@ README_USER.md
 README_USER.en.md
 README_USER.ko.md
 
-# ruler generated files (tracked, generated from .ruler/)
+# ruler generated/local agent files
 AGENTS.md
 CLAUDE.md
 .agents/skills/
-.codex/agents/
+.codex/
 .ruler/agents/

@@ -23,14 +23,10 @@ packaging/dist/
 examples/vendor_mapping.*
 !examples/vendor_mapping.example.csv
 
-# local agent worktrees
-.claude/worktrees/
-
-# local Codex configuration generated per machine
-/.codex/config.toml
-/.codex/config.toml.bak
-/.codex/hooks.json
-
-# Ruler generated startup files; edit .ruler/AGENTS.md instead
+# Ruler generated agent outputs; edit .ruler/ instead
+/.agents/skills/
+/.claude/
+/.codex/
+/CLAUDE.md
 /AGENTS.md.bak
 /CLAUDE.md.bak
