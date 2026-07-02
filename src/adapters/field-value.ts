@@ -33,6 +33,11 @@ export function totalsArePopulated(totQty: string, totAmt: string): boolean {
   return isPopulatedTotal(totQty) && isPopulatedTotal(totAmt);
 }
 
+/** Operator-facing failure used when the driver refuses to save a draft with missing totals. */
+export function describeTotalsGateFailure(totQty: string, totAmt: string): string {
+  return `pre_save_totals_not_populated: totQty=${JSON.stringify(totQty)} totAmt=${JSON.stringify(totAmt)}`;
+}
+
 /** 人工门护栏：仅当原生弹窗是"是否真的去 발급/제출/전송"的疑问句时返回 true。
  *  saveDraft 对这类弹窗一律 dismiss、绝不 accept——accept 等于发起申请，越过仅限草稿(임시저장)的边界。
  *  注意：仅"提及"这些词的陈述句通知（如"…[전송]…발급신청이 완료됩니다"这类完成后提示）不算疑问句，返回 false，放行保存。 */

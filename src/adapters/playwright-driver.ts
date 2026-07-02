@@ -12,7 +12,12 @@ import type { SubmissionRecord } from "../core/model.js";
 import { err, ok, type Result } from "../core/result.js";
 import { buildSubmissionPlan, type SubmissionPlan } from "../core/submission-plan.js";
 import type { BrowserDriver, SaveResult, SiteCredentials } from "../ports/browser-driver.js";
-import { isIssuanceConfirmation, numericValueDiffers, totalsArePopulated } from "./field-value.js";
+import {
+  describeTotalsGateFailure,
+  isIssuanceConfirmation,
+  numericValueDiffers,
+  totalsArePopulated,
+} from "./field-value.js";
 import { SITE_DEFAULTS, siteContract, type RoleSelector } from "./site-contract.js";
 
 type AriaRole = Parameters<Page["getByRole"]>[0];
@@ -209,11 +214,11 @@ export class PlaywrightDriver implements BrowserDriver {
    * `totalsArePopulated` makes the dropped-totals bug surface as a timeout here rather than silently
    * at save.)
    *
-   * Best-effort and never throws: a populated value is the only success condition, and on timeout the
-   * flow still continues to saveDraft (whose own dialog check decides success) after logging decisive
-   * evidence. If the first poll finds the totals still blank, we re-fire the read-only `fnc_linepop`
-   * refresh once and keep polling — covering the "the 닫기-triggered call was lost" sub-hypothesis.
-   * This touches no submit path: fnc_linepop only refreshes totals.
+   * Hard gate: a populated value is the only success condition. On timeout, the flow fails before
+   * saveDraft after logging decisive evidence. If the first poll finds the totals still blank, we
+   * re-fire the read-only `fnc_linepop` refresh once and keep polling — covering the
+   * "the 닫기-triggered call was lost" sub-hypothesis. This touches no submit path: fnc_linepop only
+   * refreshes totals.
    */
   private async waitForFormTotals(page: Page, label: string, rowCount: number): Promise<void> {
     if (rowCount === 0) return;
@@ -303,6 +308,7 @@ export class PlaywrightDriver implements BrowserDriver {
       this.log(`[${label}] totals diag read failed: ${String(error)}`);
     }
     await this.dumpTotalsDiag(page, label);
+    throw new Error(describeTotalsGateFailure(last.totQty, last.totAmt));
   }
 
   /**

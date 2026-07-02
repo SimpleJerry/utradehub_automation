@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeTotalsGateFailure,
   isIssuanceConfirmation,
   numericValueDiffers,
   totalsArePopulated,
@@ -50,6 +51,14 @@ describe("totalsArePopulated", () => {
 
   it("reads the site's thousands-separated totals as populated", () => {
     expect(totalsArePopulated("1,234", "1,234,567.89")).toBe(true);
+  });
+});
+
+describe("describeTotalsGateFailure", () => {
+  it("includes the last observed totals in the pre-save gate error", () => {
+    expect(describeTotalsGateFailure("", "0.00")).toBe(
+      'pre_save_totals_not_populated: totQty="" totAmt="0.00"',
+    );
   });
 });
 
