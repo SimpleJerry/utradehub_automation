@@ -39,6 +39,7 @@ export function App() {
   const [confirmed, setConfirmed] = useState(false);
   const [credentials, setCredentials] = useState<Credentials>({
     baseUrl: "https://www.utradehub.or.kr/",
+    loginMode: "manual",
     username: "",
     password: "",
   });

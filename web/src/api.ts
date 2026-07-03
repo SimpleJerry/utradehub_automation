@@ -57,6 +57,7 @@ export interface BatchReport {
 
 export interface Credentials {
   baseUrl: string;
+  loginMode?: "automatic" | "manual";
   username: string;
   password: string;
 }

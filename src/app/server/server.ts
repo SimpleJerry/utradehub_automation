@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { SupplierGroup } from "../../core/model.js";
+import type { SiteCredentials } from "../../ports/browser-driver.js";
 import { previewBatch, submitBatch, type PdfInput, type PreviewPorts } from "../orchestrator.js";
 import { summarizeSupplierGroup, writeDiagnosticFile } from "../diagnostics.js";
 import type { LlmRequestConfig } from "../dto.js";
@@ -15,7 +16,7 @@ interface PreviewBody {
 interface RunBody {
   sessionId: string;
   approvedGroupKeys: string[];
-  credentials: { baseUrl: string; username: string; password: string };
+  credentials: SiteCredentials;
 }
 
 /** Build the local HTTP API. Dependencies are injected so tests use fakes (no browser/network). */
@@ -69,3 +70,4 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
   return app;
 }
+

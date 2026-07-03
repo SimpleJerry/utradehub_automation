@@ -26,7 +26,11 @@ export function PreviewStage({
   onCredentialsChange,
   onRun,
 }: Props) {
-  const canRun = !busy && confirmed && credentials.username !== "" && credentials.password !== "";
+  const manualLogin = credentials.loginMode === "manual";
+  const canRun =
+    !busy &&
+    confirmed &&
+    (manualLogin || (credentials.username !== "" && credentials.password !== ""));
 
   return (
     <section>
@@ -53,15 +57,29 @@ export function PreviewStage({
         />
       ))}
       <h3>登录（仅本次会话，不保存）</h3>
+      <p>
+        <label>
+          <input
+            type="checkbox"
+            checked={manualLogin}
+            onChange={(e) =>
+              onCredentialsChange({ loginMode: e.target.checked ? "manual" : "automatic" })
+            }
+          />{" "}
+          在 Chrome 中手动登录
+        </label>
+      </p>
       <input
         placeholder="账号"
         value={credentials.username}
+        disabled={manualLogin}
         onChange={(e) => onCredentialsChange({ username: e.target.value })}
       />{" "}
       <input
         placeholder="密码"
         type="password"
         value={credentials.password}
+        disabled={manualLogin}
         onChange={(e) => onCredentialsChange({ password: e.target.value })}
       />
       <p>

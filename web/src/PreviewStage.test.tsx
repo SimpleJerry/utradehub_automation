@@ -6,6 +6,7 @@ import { type Credentials, type GroupPreview } from "./api.js";
 
 const baseCredentials: Credentials = {
   baseUrl: "https://www.utradehub.or.kr/",
+  loginMode: "automatic",
   username: "",
   password: "",
 };
@@ -96,6 +97,18 @@ describe("PreviewStage", () => {
     expect(btn.disabled).toBe(true);
   });
 
+  it("run button is enabled in manual login mode without credentials", () => {
+    render(
+      <PreviewStage
+        {...baseProps}
+        confirmed={true}
+        credentials={{ ...baseCredentials, loginMode: "manual" }}
+      />,
+    );
+    const btn = screen.getByRole("button", { name: "确认并运行" }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+  });
+
   it("run button is enabled when confirmed and credentials provided", () => {
     render(
       <PreviewStage
@@ -125,7 +138,7 @@ describe("PreviewStage", () => {
   it("calls onConfirmedChange when confirmation checkbox toggled", () => {
     const onConfirmedChange = vi.fn();
     render(<PreviewStage {...baseProps} onConfirmedChange={onConfirmedChange} />);
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /我已核对预览/ }));
     expect(onConfirmedChange).toHaveBeenCalledWith(true);
   });
 
@@ -136,6 +149,13 @@ describe("PreviewStage", () => {
       target: { value: "testuser" },
     });
     expect(onCredentialsChange).toHaveBeenCalledWith({ username: "testuser" });
+  });
+
+  it("calls onCredentialsChange when manual login toggles", () => {
+    const onCredentialsChange = vi.fn();
+    render(<PreviewStage {...baseProps} onCredentialsChange={onCredentialsChange} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "在 Chrome 中手动登录" }));
+    expect(onCredentialsChange).toHaveBeenCalledWith({ loginMode: "manual" });
   });
 
   it("shows confirmation checkbox with correct label", () => {
