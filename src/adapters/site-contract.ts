@@ -25,6 +25,8 @@ export const siteContract = {
     mainFrame: 'iframe[name^="mainFrame"]',
     menuLink: { role: "link", name: "구매확인서 통합서비스" } satisfies RoleSelector,
     applyButton: { role: "button", name: "구매확인서 신청 바로가기" } satisfies RoleSelector,
+    applicationFrame: "EGUME_MAIN_FR",
+    applicationLink: "#prchAppl",
     write: { role: "button", name: "작성" } satisfies RoleSelector,
   },
   basicInfo: {

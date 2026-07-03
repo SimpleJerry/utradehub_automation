@@ -15,4 +15,19 @@ describe("credentialsFromEnv", () => {
     const result = credentialsFromEnv({});
     expect(result.ok).toBe(false);
   });
+
+  it("allows manual login without persisted credentials", () => {
+    const result = credentialsFromEnv({
+      SITE_BASE_URL: "https://www.utradehub.or.kr/",
+      SITE_MANUAL_LOGIN: "1",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        baseUrl: "https://www.utradehub.or.kr/",
+        loginMode: "manual",
+      },
+    });
+  });
 });

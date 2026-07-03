@@ -6,7 +6,7 @@ import type { SubmissionRecord } from "../../src/core/model.js";
 const gated = process.env.SITE_E2E === "1";
 
 // Gated: only runs with SITE_E2E=1 against the live uTradeHub site. Needs Google Chrome
-// installed (channel:"chrome") and SITE_* credentials in the environment.
+// installed (channel:"chrome") and either SITE_* credentials or SITE_MANUAL_LOGIN=1.
 describe.skipIf(!gated)("uTradeHub draft (gated)", () => {
   it("creates a 임시저장 draft", async () => {
     const credentials = credentialsFromEnv();
@@ -31,6 +31,7 @@ describe.skipIf(!gated)("uTradeHub draft (gated)", () => {
     };
 
     const result = await new PlaywrightDriver().createDraft(record, credentials.value);
-    expect(result.ok).toBe(true);
-  }, 120_000);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.success).toBe(true);
+  }, 240_000);
 });

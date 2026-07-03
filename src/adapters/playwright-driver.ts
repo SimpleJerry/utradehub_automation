@@ -7,6 +7,7 @@ import {
   type Frame,
   type Locator,
   type Page,
+  type Request,
 } from "playwright-core";
 import type { SubmissionRecord } from "../core/model.js";
 import { err, ok, type Result } from "../core/result.js";
@@ -76,7 +77,7 @@ export class PlaywrightDriver implements BrowserDriver {
       at("settle_totals");
       await this.waitForFormTotals(page, label, plan.lineItems.length);
       at("save");
-      const result = await this.saveDraft(page);
+      const result = await this.saveDraft(page, label);
       this.log(`[${label}] ✓ saved: ${JSON.stringify(result)}`);
       return ok(result);
     } catch (error) {
@@ -113,6 +114,11 @@ export class PlaywrightDriver implements BrowserDriver {
         .catch(() => undefined);
     }
     await writeFile(join(dir, `${safe}_main.html`), await page.content()).catch(() => undefined);
+    for (const [i, frame] of page.frames().entries()) {
+      await writeFile(join(dir, `${safe}_frame${i}.html`), await frame.content()).catch(
+        () => undefined,
+      );
+    }
     this.log(`[${label}] artifacts → ${dir}  (prefix ${safe})`);
   }
 
@@ -126,6 +132,11 @@ export class PlaywrightDriver implements BrowserDriver {
       .screenshot({ path: join(dir, `${safe}.png`), fullPage: true })
       .catch(() => undefined);
     await writeFile(join(dir, `${safe}.html`), await page.content()).catch(() => undefined);
+    for (const [i, frame] of page.frames().entries()) {
+      await writeFile(join(dir, `${safe}_frame${i}.html`), await frame.content()).catch(
+        () => undefined,
+      );
+    }
     this.log(`snapshot → ${safe}.{png,html}`);
   }
 
@@ -372,6 +383,11 @@ export class PlaywrightDriver implements BrowserDriver {
       );
       this.log(`[${label}] totals diag controls: ${JSON.stringify(dump.controls)}`);
       this.log(`[${label}] totals diag display-vs-field: ${JSON.stringify(dump.displayVsField)}`);
+      const dir = process.env.UTH_DIAG_DIR ?? join(process.cwd(), ".diagnostics");
+      await mkdir(dir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const safe = `${stamp}_${label.replace(/[^\w.-]+/g, "_")}_totals_live.json`;
+      await writeFile(join(dir, safe), JSON.stringify(dump, null, 2)).catch(() => undefined);
     } catch (error) {
       this.log(`[${label}] totals diag deep read failed: ${String(error)}`);
     }
@@ -436,6 +452,20 @@ export class PlaywrightDriver implements BrowserDriver {
 
   private async login(page: Page, credentials: SiteCredentials): Promise<void> {
     await page.goto(credentials.baseUrl);
+
+    if (credentials.loginMode === "manual") {
+      const waitMs = Number(process.env.SITE_MANUAL_LOGIN_WAIT_MS ?? "60000");
+      this.log(`[manual-login] waiting ${waitMs}ms for operator login to complete`);
+      await page.waitForTimeout(waitMs);
+      await this.role(page, siteContract.form.menuLink).first().waitFor({
+        state: "visible",
+        timeout: 180000,
+      });
+      await this.drainPopups(page);
+      await page.waitForLoadState("domcontentloaded");
+      return;
+    }
+
     await page.getByPlaceholder(siteContract.login.idPlaceholder).fill(credentials.username);
     await page.getByPlaceholder(siteContract.login.passwordPlaceholder).fill(credentials.password);
     await this.role(page, siteContract.login.submit, true).click();
@@ -444,8 +474,15 @@ export class PlaywrightDriver implements BrowserDriver {
   }
 
   private async openForm(page: Page): Promise<void> {
-    await this.role(page, siteContract.form.menuLink).click();
-    await this.role(page, siteContract.form.applyButton).click();
+    await this.role(page, siteContract.form.menuLink).first().click();
+    const legacyApply = this.role(page, siteContract.form.applyButton);
+    try {
+      await legacyApply.click({ timeout: 10000 });
+    } catch {
+      const introFrame = page.frame({ name: siteContract.form.applicationFrame });
+      if (!introFrame) throw new Error("application frame not found");
+      await introFrame.locator(siteContract.form.applicationLink).click({ timeout: 10000 });
+    }
     await page.waitForLoadState("domcontentloaded");
     const frame = await this.mainFrame(page);
     await this.role(frame, siteContract.form.write).click();
@@ -578,7 +615,96 @@ export class PlaywrightDriver implements BrowserDriver {
     if (!popup.isClosed()) await popup.close();
   }
 
-  private async saveDraft(page: Page): Promise<SaveResult> {
+  private async readDraftTotals(frame: Frame): Promise<Record<string, string>> {
+    return await frame.evaluate(() => {
+      const form = (document as unknown as { viewForm?: HTMLFormElement }).viewForm;
+      const get = (name: string): string => {
+        const control = form?.elements.namedItem(name) as
+          | HTMLInputElement
+          | HTMLSelectElement
+          | HTMLTextAreaElement
+          | null;
+        return control?.value ?? "";
+      };
+      return {
+        refNum: get("refNum"),
+        docId: get("docId"),
+        sts: get("sts"),
+        pageGubun: get("pageGubun"),
+        litemCnt: get("litemCnt"),
+        totQty: get("totQty"),
+        totQtyCd: get("totQtyCd"),
+        totAmt: get("totAmt"),
+        totAmtAcntCrny: get("totAmtAcntCrny"),
+        totAmtAcntCrnyView: get("totAmtAcntCrnyView"),
+        totQtyLitem: get("totQtyLitem"),
+        totAmtLitem: get("totAmtLitem"),
+        totFrgnAmt: get("totFrgnAmt"),
+        totalWchrgAmt: get("totalWchrgAmt"),
+        totalWchrgFrgnAmt: get("totalWchrgFrgnAmt"),
+      };
+    });
+  }
+
+  private async captureSavedDraftReadbackDiag(page: Page, label: string): Promise<void> {
+    if (process.env.UTH_DIAG !== "1") return;
+    const dir = process.env.UTH_DIAG_DIR ?? join(process.cwd(), ".diagnostics");
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safeLabel = label.replace(/[^\w.-]+/g, "_");
+    let readbackUrl: string | null = null;
+    let before: Record<string, string> | null = null;
+    let responseBody: unknown = null;
+    let after: Record<string, string> | null = null;
+    let error: string | null = null;
+
+    try {
+      const frame = await this.mainFrame(page);
+      before = await this.readDraftTotals(frame);
+      const responsePromise = page
+        .waitForResponse(
+          (response) =>
+            response.url().includes("/li/cnfrmprch/retrieveETSCnfrmPrchApplL.do") &&
+            response.request().method() === "POST",
+          { timeout: 15000 },
+        )
+        .catch(() => undefined);
+
+      await frame.evaluate(() => {
+        const fn = (window as unknown as { doAction?: (key: string) => void }).doAction;
+        if (typeof fn !== "function") throw new Error("doAction not found");
+        fn("modifyForm");
+      });
+
+      const response = await responsePromise;
+      readbackUrl = response?.url() ?? null;
+      if (response) {
+        responseBody = await response.json().catch(async () => ({
+          text: await response.text().catch(() => "<unreadable>"),
+        }));
+      }
+      await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
+      after = await this.readDraftTotals(await this.mainFrame(page)).catch(() => null);
+    } catch (cause) {
+      error = String(cause);
+    }
+
+    await writeFile(
+      join(dir, `${stamp}_${safeLabel}_saved_readback.json`),
+      JSON.stringify(
+        {
+          readbackUrl,
+          before,
+          responseBody,
+          after,
+          error,
+        },
+        null,
+        2,
+      ),
+    ).catch(() => undefined);
+  }
+  private async saveDraft(page: Page, label: string): Promise<SaveResult> {
     const frame = await this.mainFrame(page);
 
     // 임시저장 fires a SEQUENCE of native dialogs, not just one: typically a confirm/notice that gates
@@ -621,6 +747,39 @@ export class PlaywrightDriver implements BrowserDriver {
       this.log(`[save] dialog(${type}) → accept(확인): "${message}"`);
       void d.accept().catch(() => undefined);
     };
+    const savePosts: Array<{
+      method: string;
+      resourceType: string;
+      url: string;
+      fields: Record<string, string>;
+    }> = [];
+    const onRequest = (request: Request): void => {
+      if (process.env.UTH_DIAG !== "1") return;
+      const url = request.url();
+      if (!/cnfrmprch|ETSC/i.test(url)) return;
+      const postData = request.method() === "POST" ? (request.postData() ?? "") : "";
+      const fields: Record<string, string> = {};
+      const collect = (key: string, value: unknown): void => {
+        if (/tot|qty|amt|frgn|wchrg|litem/i.test(key)) fields[key] = String(value ?? "");
+      };
+
+      try {
+        const parsed = JSON.parse(postData) as Record<string, unknown>;
+        for (const [key, value] of Object.entries(parsed)) collect(key, value);
+      } catch {
+        const params = new URLSearchParams(postData);
+        for (const [key, value] of params.entries()) collect(key, value);
+      }
+
+      savePosts.push({
+        method: request.method(),
+        resourceType: request.resourceType(),
+        url,
+        fields,
+      });
+    };
+    const context = page.context();
+    context.on("request", onRequest);
     page.on("dialog", onDialog);
 
     try {
@@ -651,9 +810,25 @@ export class PlaywrightDriver implements BrowserDriver {
       // own network-idle signal, never a fixed sleep. This also guarantees we do not close the browser
       // while the save POST is still in flight. Best-effort/bounded: a quiet page resolves at once.
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
+      await this.dumpTotalsDiag(page, `${label}_after_save`).catch(() => undefined);
     } finally {
       page.off("dialog", onDialog);
+      context.off("request", onRequest);
     }
+
+    if (process.env.UTH_DIAG === "1" && savePosts.length > 0) {
+      const dir = process.env.UTH_DIAG_DIR ?? join(process.cwd(), ".diagnostics");
+      await mkdir(dir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      await writeFile(
+        join(dir, `${stamp}_save_posts_totals.json`),
+        JSON.stringify(savePosts, null, 2),
+      ).catch(() => undefined);
+    }
+
+    await this.captureSavedDraftReadbackDiag(page, label).catch((error) => {
+      this.log(`[diag] saved draft readback capture failed: ${String(error)}`);
+    });
 
     const combined = messages.join(" | ");
     // Success heuristic unchanged: after a real accept the completion notice ("…저장되었습니다", etc.)

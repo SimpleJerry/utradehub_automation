@@ -1,11 +1,17 @@
 import type { SubmissionRecord } from "../core/model.js";
 import type { Result } from "../core/result.js";
 
-export interface SiteCredentials {
-  baseUrl: string;
-  username: string;
-  password: string;
-}
+export type SiteCredentials =
+  | {
+      baseUrl: string;
+      loginMode?: "automatic";
+      username: string;
+      password: string;
+    }
+  | {
+      baseUrl: string;
+      loginMode: "manual";
+    };
 
 export interface SaveResult {
   success: boolean;
