@@ -1,4 +1,4 @@
-﻿import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   chromium,
@@ -216,6 +216,15 @@ export class PlaywrightDriver implements BrowserDriver {
       .waitFor({ state: "hidden", timeout: 8000 })
       .catch(() => undefined);
     await popup.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => undefined);
+  }
+
+  private async waitForSaveLoadingToClear(page: Page): Promise<void> {
+    for (const frame of page.frames()) {
+      const overlay = frame.locator(".blockUI.blockOverlay").first();
+      await overlay.waitFor({ state: "visible", timeout: 500 }).catch(() => undefined);
+      await overlay.waitFor({ state: "hidden", timeout: 30000 }).catch(() => undefined);
+    }
+    await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => undefined);
   }
 
   /**
@@ -790,6 +799,14 @@ export class PlaywrightDriver implements BrowserDriver {
     const context = page.context();
     context.on("request", onRequest);
     page.on("dialog", onDialog);
+    const saveResponsePromise = page
+      .waitForResponse(
+        (response) =>
+          response.url().includes("/li/cnfrmprch/registerETSCnfrmPrchApplC.do") &&
+          response.request().method() === "POST",
+        { timeout: 30000 },
+      )
+      .catch(() => undefined);
 
     try {
       await this.role(frame, siteContract.save.tempSave, true).click();
@@ -814,11 +831,19 @@ export class PlaywrightDriver implements BrowserDriver {
         };
       }
 
-      // The accepted confirm fires the main-form POST. Wait for that round-trip to COMMIT on the server
-      // — and any trailing completion alert to fire (drained by the persistent handler) — on the site's
-      // own network-idle signal, never a fixed sleep. This also guarantees we do not close the browser
-      // while the save POST is still in flight. Best-effort/bounded: a quiet page resolves at once.
-      await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
+      // The accepted confirm fires the main-form POST. Wait for that exact save response and the
+      // site's blockUI loading overlay to clear before closing Chrome; otherwise the browser can be
+      // torn down while the portal is still finishing its save-side postback.
+      const saveResponse = await saveResponsePromise;
+      if (!saveResponse) {
+        return {
+          success: false,
+          referenceNo: null,
+          message: "임시저장: 저장 POST 응답을 확인하지 못함 (저장 미확인)",
+        };
+      }
+      await saveResponse.finished().catch(() => undefined);
+      await this.waitForSaveLoadingToClear(page);
       await this.dumpTotalsDiag(page, `${label}_after_save`).catch(() => undefined);
     } finally {
       page.off("dialog", onDialog);
@@ -850,4 +875,3 @@ export class PlaywrightDriver implements BrowserDriver {
     return { success, referenceNo: refMatch ? (refMatch[0] ?? null) : null, message };
   }
 }
-
