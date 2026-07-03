@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { SupplierGroup } from "../../core/model.js";
 import { previewBatch, submitBatch, type PdfInput, type PreviewPorts } from "../orchestrator.js";
+import { summarizeSupplierGroup, writeDiagnosticFile } from "../diagnostics.js";
 import type { LlmRequestConfig } from "../dto.js";
 import type { ServerDeps } from "./deps.js";
 
@@ -44,6 +45,11 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const outcome = await previewBatch(inputs, ports);
     const sessionId = randomUUID();
     sessions.set(sessionId, outcome.groups);
+    await writeDiagnosticFile("ui_preview_session", {
+      sessionId,
+      groups: outcome.groups.map(summarizeSupplierGroup),
+      extractionFailures: outcome.result.extractionFailures,
+    }).catch(() => undefined);
     return { sessionId, ...outcome.result };
   });
 
@@ -53,6 +59,11 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     if (!groups) return { error: "session_not_found" };
 
     const approved = groups.filter((g) => body.approvedGroupKeys.includes(g.groupKey));
+    await writeDiagnosticFile("ui_run_approved_groups", {
+      sessionId: body.sessionId,
+      approvedGroupKeys: body.approvedGroupKeys,
+      groups: approved.map(summarizeSupplierGroup),
+    }).catch(() => undefined);
     return submitBatch(approved, body.credentials, deps.driver);
   });
 

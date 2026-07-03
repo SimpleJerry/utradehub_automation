@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+﻿import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   chromium,
@@ -11,6 +11,11 @@ import {
 } from "playwright-core";
 import type { SubmissionRecord } from "../core/model.js";
 import { err, ok, type Result } from "../core/result.js";
+import {
+  summarizeSubmissionPlan,
+  summarizeSupplierGroup,
+  writeDiagnosticFile,
+} from "../app/diagnostics.js";
 import { buildSubmissionPlan, type SubmissionPlan } from "../core/submission-plan.js";
 import type { BrowserDriver, SaveResult, SiteCredentials } from "../ports/browser-driver.js";
 import {
@@ -35,6 +40,10 @@ export class PlaywrightDriver implements BrowserDriver {
   ): Promise<Result<SaveResult>> {
     const plan = buildSubmissionPlan(record, SITE_DEFAULTS);
     const label = record.supplierNameKo ?? record.payToVendorNameEn ?? record.groupKey;
+    await writeDiagnosticFile("driver_submission_plan", {
+      group: summarizeSupplierGroup(record),
+      plan: summarizeSubmissionPlan(plan),
+    }).catch(() => undefined);
     let browser: Browser | undefined;
     let page: Page | undefined;
     let step = "launch";
@@ -841,3 +850,4 @@ export class PlaywrightDriver implements BrowserDriver {
     return { success, referenceNo: refMatch ? (refMatch[0] ?? null) : null, message };
   }
 }
+
