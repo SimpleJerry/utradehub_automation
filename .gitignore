@@ -24,6 +24,7 @@ examples/vendor_mapping.*
 !examples/vendor_mapping.example.csv
 
 # Ruler generated agent outputs; edit .ruler/ instead
+/AGENTS.md
 /.agents/skills/
 /.claude/
 /.codex/

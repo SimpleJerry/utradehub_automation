@@ -1,94 +1,192 @@
 # UTradeHub Automation
 
-## Language / 语言 / 언어
-- 中文（주 문서）：[README.md](./README.md)
+이 저장소는 한국 `구매확인서` 업무를 위한 로컬 초안 생성 도구입니다:
+
+`구매주문 PDF -> 구조화 추출 -> 영문 공급사/HS 매핑 -> 공급사별 그룹화 -> 운영자 미리보기 승인 -> uTradeHub 임시저장 초안`
+
+**하드 경계: 휴먼 게이트.** 도구는 `임시저장` 초안만 만들 수 있습니다. 최종 `발급`, `제출` 또는 동등한 발급/제출 동작을 자동으로 클릭해서는 안 됩니다. 최종 검토와 발급은 운영자가 uTradeHub 안에서 수동으로 수행해야 합니다.
+
+## 언어
+
+- 中文: [README.md](./README.md)
 - English: [README.en.md](./README.en.md)
-- 한국어 (현재): [README.ko.md](./README.ko.md)
+- 한국어: 이 파일
 
-**구매주문 PDF → 필드 추출 → 매핑/정규화 → 공급사 기준 그룹화 → uTradeHub 사이트에서 구매확인서 임시저장 초안 생성**까지 수행하는 로컬 도구입니다.
+세 README는 같은 사실을 설명해야 합니다. 기능, 스크립트, 경계, 운영 흐름이 바뀌면 세 파일을 함께 갱신하세요.
 
-**휴먼 게이트(하드 제약):** 본 도구는 **임시저장 초안**만 생성하며, 최종 발급/제출 버튼은 절대 누르지 않습니다. 최종 발급은 사람이 uTradeHub에서 검토한 뒤 수동으로 진행합니다. 자동 신고 도구가 아니라 *초안 생성기*입니다.
+## 현재 형태
 
-기술 형태: **TypeScript 풀스택 로컬 웹 앱**(Fastify 백엔드 + React/Vite UI)으로, **운영자 시스템의 Chrome**을 Playwright로 구동합니다(`channel:"chrome"`, Chromium 번들 없음). 배경은 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)와 `openspec/`(스펙 및 변경 이력)를 참고하세요.
+- 버전 라인: `package.json`의 `2.x` TypeScript 재작성 라인.
+- 백엔드: 로컬 Fastify HTTP API.
+- 프런트엔드: React 19 + Vite 운영자 UI.
+- 브라우저 자동화: `playwright-core`가 운영자 PC에 설치된 Google Chrome을 `channel: "chrome"`으로 구동합니다. Chromium은 번들하지 않습니다.
+- PDF 텍스트 추출: `unpdf`.
+- LLM 추출: Vercel AI SDK + OpenAI-compatible provider, Zod schema 검증.
+- 품질 게이트: `npm run verify` (`typecheck + lint + format:check + test`).
+- 패키징: `packaging/package.mjs`가 프런트엔드와 백엔드 번들을 만들고, 현재 Node 런타임과 프로덕션 의존성을 복사한 뒤, 선택적으로 Inno Setup으로 per-user Windows 설치 패키지를 만듭니다.
 
-## 1. 기능 범위
+아키텍처와 스펙 이력은 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) 및 [openspec/](./openspec/)를 참고하세요.
 
-1. 여러 구매주문 PDF를 일괄 수집합니다.
-2. LLM 기반(공급자 비종속, OpenAI 호환) 구조화 추출로 핵심 필드(`Blanket Purchase Order No.`, `Document Date`, `Pay-to Vendor No.`, 품목 행)를 뽑고 zod 스키마로 검증합니다.
-3. 공급사/HS Code 매핑은 외부 CSV로 처리합니다.
-4. `Pay-to Vendor No.` 기준 그룹화: `m개 PDF → n개 공급사 그룹`(보통 `m ≥ n`).
-5. preflight 검증 후 **드라이런 미리보기**(각 그룹이 입력할 내용 + 검증 결과)를 표시합니다.
-6. 사람이 확인한 뒤, 그룹별로 사이트에서 `login → open_form → fill_basic_info → select_supplier → fill_line_items → 임시저장`을 실행하고 결과 리포트를 출력합니다.
-7. 자격증명은 **메모리 전용**: 세션마다 UI에서 입력하고 해당 실행의 메모리에만 보관하며, 디스크나 로그에 절대 기록하지 않습니다.
+## 범위
 
-## 2. 디렉터리 구조
+지원하는 워크플로:
+
+1. 운영자가 로컬 UI에서 공급사 매핑 CSV를 선택하고, 이번 실행의 LLM API Key를 입력하며, 하나 이상의 구매주문 PDF를 선택합니다.
+2. `/api/preview`는 드라이런을 수행합니다: PDF 텍스트 추출, LLM 구조화 추출, 공급사 매핑, 공급사 그룹화, 제출 전 검증.
+3. LLM이 추출하는 공급사 필드는 `payToVendorNameEn`(영문 Pay-to Vendor 이름)입니다. CSV는 이 영문 이름을 `supplierNameKo`와 `hsCode`로 매핑합니다.
+4. 프런트엔드는 각 공급사 그룹이 제출할 필드와 품목 행, 누락 필드, 제출 계획에서 제외될 품목 행, PDF/LLM 추출 실패를 보여줍니다.
+5. 운영자는 처리할 공급사 그룹만 승인하고 로그인 방식을 선택합니다.
+6. `/api/run`은 승인된 그룹에 대해서만 브라우저 드라이버를 호출하고, 그룹별로 `임시저장` 초안을 만든 뒤 결과 리포트를 반환합니다.
+
+도구가 명시적으로 하지 않는 일:
+
+- LLM API Key, uTradeHub 계정/비밀번호, 세션 자격증명을 저장하지 않습니다.
+- 비공개 공급사 매핑을 커밋하지 않습니다.
+- 기본 검증에서 네트워크에 접근하거나 실제 브라우저를 실행하지 않습니다.
+- HS code, 포털 필드 의미, 실제 발급, 릴리스 승인에 대한 사람의 판단을 대체하지 않습니다.
+
+## 디렉터리 구조
 
 ```text
 utradehub_automation/
 ├─ src/
-│  ├─ core/        # 순수 도메인 로직(모델/매핑/그룹화/검증/제출 계획), I/O 없음, 전부 단위 테스트
-│  ├─ ports/       # 외부 의존성 인터페이스(LLM provider, 브라우저 드라이버, PDF 텍스트, Extractor)
-│  ├─ adapters/    # ports 구현(LLM 추출, unpdf, Playwright 드라이버, 사이트 계약, 드리프트 감지)
-│  └─ app/         # 조립 루트: DTO, 오케스트레이션, 환경 점검, Fastify 서버
-├─ web/            # React + Vite 프런트엔드(설정 / 드라이런 미리보기 / 자격증명 + 실행 / 리포트)
-├─ test/           # 단위 테스트 및 test/fixtures/ golden-file 픽스처
-├─ examples/       # vendor_mapping.example.csv 등 템플릿
-├─ docs/           # ARCHITECTURE.md
-├─ openspec/       # 스펙(specs/)과 변경 이력(changes/archive/)
-├─ packaging/      # Windows 설치 패키지 빌드(esbuild + Inno Setup)
-└─ .env.example    # 개발자 gated 통합 테스트 전용
+│  ├─ core/        # 순수 도메인 로직: 모델, 품목 행, CSV, 매핑, 그룹화, 검증, 제출 계획
+│  ├─ ports/       # 외부 의존성 인터페이스: PDF text, LLM, Extractor, BrowserDriver
+│  ├─ adapters/    # unpdf, OpenAI-compatible LLM, Playwright, 사이트 계약/드리프트, CSV loader
+│  └─ app/         # DTO, 오케스트레이션, 진단, 환경 점검, Fastify server
+├─ web/            # React/Vite 운영자 UI: 설정, 미리보기, 휴먼 승인, 실행, 리포트
+├─ test/           # Vitest 백엔드/코어 테스트와 fixtures
+├─ web/src/        # 프런트엔드 컴포넌트와 *.test.tsx
+├─ examples/       # vendor_mapping.example.csv 같은 커밋 가능한 템플릿
+├─ docs/           # 아키텍처 설명과 설계 기록
+├─ openspec/       # 스펙, 변경 제안, 아카이브 이력
+├─ packaging/      # Windows 패키징 스크립트와 Inno Setup 설정
+├─ scripts/        # Ruler asset sync 같은 유지보수 스크립트
+└─ .ruler/         # AGENTS.md, skills, subagents의 단일 소스
 ```
 
-## 3. 공급사 매핑 CSV (고정 컬럼)
+`.ruler/AGENTS.md`가 agent 시작 지침의 단일 진실 소스입니다. 루트 `AGENTS.md`는 더 이상 추적하지 않으며, 직접 작성하거나 커밋하지 마세요. `npm run agents:sync`는 `.ruler/AGENTS.md`에서 루트 `AGENTS.md`를 다시 생성하고 `CLAUDE.md`, `.claude/`, `.codex/`, `.agents/skills/` 같은 로컬 플랫폼 출력을 갱신합니다. 루트 `AGENTS.md`는 `.gitignore`에 의해 무시되며 더 이상 커밋되는 진실 소스가 아닙니다.
 
-UI에서 공급사 매핑용 CSV를 선택합니다. 컬럼명은 아래와 같이 고정입니다:
+## 공급사 매핑 CSV
+
+UI에는 아래 고정 컬럼을 가진 CSV가 필요합니다:
 
 ```csv
 vendor_name_en,supplier_name_ko,hs_code
 Skin Medience,스킨메디언스,3916909000
 ```
 
-템플릿은 [`examples/vendor_mapping.example.csv`](./examples/vendor_mapping.example.csv)를 참고하세요. 이를 복사해 자신의 매핑 파일로 만들고, **실제 매핑 데이터는 저장소에 커밋하지 마세요.**
+`vendor_name_en`은 추출된 `payToVendorNameEn`에 대응합니다. 템플릿은 [examples/vendor_mapping.example.csv](./examples/vendor_mapping.example.csv)를 참고하세요. 로컬 사용을 위해 템플릿을 복사하되, 비공개 공급사, HS code, 고객 데이터는 커밋하지 마세요.
 
-## 4. 실행 / 배포 (비기술 운영자용)
+## 운영자 실행
 
-운영자는 **Node나 Docker가 필요 없습니다**:
+비기술 운영자를 위한 목표 경로는 Windows 설치 패키지입니다:
 
-1. 설치 패키지 `UTradeHubAutomationSetup.exe`를 실행해 설치합니다(per-user, 관리자 권한 불필요).
-2. 바탕화면/시작 메뉴의 **UTradeHub Automation** 아이콘을 더블클릭 — 로컬 서비스가 시작되고 브라우저가 자동으로 열립니다.
-3. UI에서: 공급사 매핑 CSV **업로드**, **LLM API Key** 입력(메모리 전용, 저장 안 함), PDF 선택 → "드라이런 미리보기" → 각 그룹 확인 → 이번 세션 로그인 아이디/비밀번호 입력(**메모리 전용, 저장 안 함**) → 확인 체크 → "확인 후 실행" → 결과 리포트 확인.
-4. 도구는 임시저장 초안까지만 만듭니다. uTradeHub에서 검토한 뒤 사람이 최종 발급을 진행하세요.
+1. `UTradeHubAutomationSetup.exe`를 per-user로 설치합니다. 관리자 권한은 필요하지 않습니다.
+2. 바탕화면 또는 시작 메뉴에서 **UTradeHub Automation**을 엽니다.
+3. 로컬 서비스가 `127.0.0.1:3000`에서 수신하고 브라우저를 자동으로 엽니다.
+4. UI에서 매핑 CSV 선택, LLM API Key 입력, PDF 선택, 미리보기, 수동 검토, 확인, 실행, 리포트 확인을 진행합니다.
+5. 로그인 기본값은 Chrome 수동 로그인입니다. 도구가 Chrome을 열고 운영자가 uTradeHub 로그인을 마칠 때까지 기다립니다. 자동 계정/비밀번호 로그인은 이번 세션에 한해 선택할 수 있으며 자격증명은 저장하지 않습니다.
+6. 최종 `발급` 여부를 결정하기 전에 uTradeHub 안에서 `임시저장` 초안을 수동 검토하세요.
 
-**사전 조건:** 운영자 시스템에 Chrome 설치; LLM API Key는 실행 시 UI에서 입력(model/base는 기본값 있음, "고급"에서 재정의 가능); 매핑 CSV 준비. 실행 전 UI가 환경 차단 항목(Chrome)을 요약합니다.
+사전 조건:
 
-**설치 패키지 빌드(개발자):** `npm run package`가 프런트엔드 빌드, esbuild로 백엔드 번들, 휴대용 Node + 프로덕션 `node_modules` 동봉 후 Inno Setup으로 `packaging/dist/UTradeHubAutomationSetup.exe`를 생성합니다. CI는 `v*` 태그에서 자동 빌드/배포합니다(`.github/workflows/release.yml`).
+- 운영자 PC에 Google Chrome이 설치되어 있습니다.
+- LLM API Key와 uTradeHub 자격증명은 현재 실행에만 입력합니다.
+- 공급사 매핑 CSV가 준비되어 있습니다.
+- UI는 Chrome 누락 같은 차단 항목을 확인하는 “환경 점검” 동작을 제공합니다.
 
-## 5. 개발
+## 개발
 
-환경: Node ≥ 24, npm(개발 머신에 pnpm 미설치).
+Node.js >= 24와 npm이 필요합니다.
 
 ```powershell
-npm install          # 의존성 설치
-npm run dev          # 개발 모드: Vite 프런트엔드 + Fastify 백엔드 병렬
-npm run verify       # typecheck + lint + format:check + test(유일한 헬스 게이트)
-npm test             # 테스트만 실행
-npm run format       # Prettier 자동 포맷
+npm install
+npm run dev
+npm run verify
 ```
 
-규약(`docs/ARCHITECTURE.md` 참고):
-- functional-core / imperative-shell 계층화; 모든 외부 의존성(LLM, 브라우저, 파일시스템, 시계)은 ports를 통해서만 접근하여 코어를 I/O 없이 단위 테스트합니다.
-- 자격증명/시크릿은 절대 커밋하지 않으며, 시크릿이 없는 `.env.example`만 체크인합니다.
-- golden-file 픽스처로 결정적 테스트를 구동합니다.
-
-CI(`.github/workflows/ci.yml`)는 모든 push/PR에서 `npm run verify`를 실행합니다. "실패 시 머지 차단"은 GitHub 저장소 설정에서 브랜치 보호를 직접 활성화해야 합니다.
-
-## 6. 사이트 통합 테스트 (gated)
-
-실제 uTradeHub 사이트를 초안까지 구동하는 통합 테스트는 기본적으로 건너뛰며, 명시적으로 활성화할 때만 실행됩니다:
+자주 쓰는 명령:
 
 ```powershell
-$env:SITE_E2E = "1"   # 추가로 .env의 SITE_BASE_URL / SITE_USERNAME / SITE_PASSWORD(개발 머신 전용, 절대 커밋 금지)
+npm run typecheck      # TypeScript strict check
+npm run lint           # ESLint
+npm run format:check   # Prettier check
+npm run test           # Vitest
+npm run coverage       # Vitest coverage
+npm run fix            # eslint --fix + prettier write
+npm run build          # Vite frontend build
+npm run start          # built web/dist를 사용하는 Fastify server
+```
+
+`npm run verify`가 단일 헬스 게이트이며 CI의 로컬 등가 명령입니다. 기본 검증은 네트워크 0, 실제 브라우저 0을 유지해야 합니다.
+
+## 패키징
+
+```powershell
+npm run package
+```
+
+패키징 흐름:
+
+1. `npm run build`가 `web/dist`를 만듭니다.
+2. esbuild가 `src/app/server/index.ts`를 Node ESM 백엔드 엔트리로 번들합니다.
+3. 임시 stage에서 `npm ci --omit=dev --ignore-scripts`를 실행하고 프로덕션 `node_modules`를 복사합니다.
+4. 현재 머신의 `node.exe`를 `packaging/build/`로 복사합니다.
+5. launcher인 `UTradeHubAutomation.cmd`를 생성합니다.
+6. Inno Setup을 사용할 수 있으면 설치 패키지를 `packaging/dist/`에 씁니다.
+
+Inno Setup 없이 빌드하려면:
+
+```powershell
+node packaging/package.mjs --no-installer
+```
+
+CI release workflow는 버전 태그에서 설치 패키지를 빌드합니다. 실제 게시, 태그, 외부 릴리스 승인은 계속 휴먼 게이트입니다.
+
+## 실제 사이트 테스트
+
+실제 uTradeHub 통합 테스트는 기본적으로 건너뜁니다. 개발자 로컬 환경 변수를 명시적으로 제공할 때만 실행됩니다. 테스트는 현재 프로세스의 `process.env`를 읽으며 `.env`를 자동 로드하지 않습니다:
+
+```powershell
+$env:SITE_E2E = "1"
+$env:SITE_BASE_URL = "https://..."
+$env:SITE_MANUAL_LOGIN = "1"  # 수동 로그인 모드; 아니면 SITE_USERNAME / SITE_PASSWORD 필요
 npm test
 ```
 
-기본 `npm run verify`는 브라우저 0, 네트워크 0입니다.
+수동 로그인 모드를 쓰지 않는 경우:
+
+```powershell
+$env:SITE_E2E = "1"
+$env:SITE_BASE_URL = "https://..."
+$env:SITE_USERNAME = "..."
+$env:SITE_PASSWORD = "..."
+npm test
+```
+
+`.env`는 개발자가 gated 테스트 변수를 로컬에서 관리할 때만 쓰며 ignored 상태를 유지합니다. 실제 사이트 검증은 `임시저장`까지만 가능하며 최종 발급이나 제출을 자동으로 수행하면 안 됩니다.
+
+## 진단 및 민감 데이터
+
+`UTH_DIAG=1`이면 앱이 미리보기/실행 요약을 `.diagnostics/`에 씁니다. `UTH_DIAG_DIR`로 다른 로컬 디렉터리를 지정할 수도 있습니다. Playwright 실패 처리도 스크린샷이나 HTML 캡처를 쓸 수 있습니다. 진단 산출물에는 계정, 공급사, 주문 맥락이 포함될 수 있으므로 ignored 상태를 유지해야 합니다.
+
+커밋하지 말아야 할 것:
+
+- `.env`
+- 비공개 공급사 매핑
+- 스크린샷, HTML 캡처, trace, HAR 또는 기타 포털 진단
+- `packaging/build/`, `packaging/dist/` 아래 패키징 산출물
+- 로컬 agent 플랫폼 출력과 루트 `AGENTS.md`
+
+## Agent/Ruler 유지보수
+
+Ruler가 공유 agent asset의 단일 진실 소스입니다:
+
+- 시작 지침: `.ruler/AGENTS.md` 편집.
+- 프로젝트 skills: `.ruler/skills/` 편집.
+- subagents: `.ruler/agents/` 편집.
+- 생성 차이 미리보기: `npm run agents:dry-run`.
+- 로컬 플랫폼 출력 갱신: `npm run agents:sync`.
+
+`.ruler/`를 유일한 진실 소스로 유지하세요. 루트 `AGENTS.md`는 Ruler가 로컬에서 생성할 수 있지만 추적하지 마세요.

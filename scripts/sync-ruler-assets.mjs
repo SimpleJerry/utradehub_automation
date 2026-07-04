@@ -1,8 +1,9 @@
-﻿import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
 const generatedStartupFiles = ["AGENTS.md", "CLAUDE.md"];
+const startupFilesToNormalize = generatedStartupFiles;
 const generatedAgentDirs = [".claude/agents"];
 const generatedCodexAgentDir = ".codex/agents";
 
@@ -26,8 +27,9 @@ const exitCode = await new Promise((resolve) => {
 if (exitCode !== 0) {
   process.exitCode = exitCode;
 } else {
-  await normalizeGeneratedStartupFile("AGENTS.md");
-  await normalizeGeneratedStartupFile("CLAUDE.md");
+  for (const path of startupFilesToNormalize) {
+    await normalizeGeneratedStartupFile(path);
+  }
   await normalizeGeneratedMarkdownAgents();
   await normalizeGeneratedCodexAgents();
 }
