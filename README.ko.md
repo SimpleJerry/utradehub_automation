@@ -142,7 +142,7 @@ Inno Setup 없이 빌드하려면:
 node packaging/package.mjs --no-installer
 ```
 
-CI release workflow는 버전 태그에서 설치 패키지를 빌드합니다. 실제 게시, 태그, 외부 릴리스 승인은 계속 휴먼 게이트입니다.
+CI release workflow는 버전 태그에서 설치 패키지를 빌드합니다. 실제 게시, 태그, 외부 릴리스 승인은 계속 휴먼 게이트이며, 게시 전 [Release Checklist](./docs/RELEASE_CHECKLIST.md)를 확인합니다.
 
 ## 실제 사이트 테스트
 

@@ -21,6 +21,8 @@ jobs:
       - run: npm ci
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
+      - name: Verify
+        run: npm run verify
       - name: Build installer
         run: npm run package
       - name: Publish installer to the release

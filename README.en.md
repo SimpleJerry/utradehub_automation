@@ -142,7 +142,7 @@ Without Inno Setup, use:
 node packaging/package.mjs --no-installer
 ```
 
-The CI release workflow builds installers from version tags. Real publication, tags, and external release approval remain human-gated.
+The CI release workflow builds installers from version tags. Real publication, tags, and external release approval remain human-gated; check [Release Checklist](./docs/RELEASE_CHECKLIST.md) before publishing.
 
 ## Real Site Testing
 

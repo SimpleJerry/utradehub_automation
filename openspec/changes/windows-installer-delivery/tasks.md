@@ -22,8 +22,9 @@
 
 ## 5. CI 自动出包
 
-- [x] 5.1 `.github/workflows/release.yml`:`push tags: v*`;Windows runner:`npm ci` → `choco install innosetup` → `npm run package` → `softprops/action-gh-release` 上传 `Setup.exe`
+- [x] 5.1 `.github/workflows/release.yml`:`push tags: v*`;Windows runner:`npm ci` → `choco install innosetup` → `npm run verify` → `npm run package` → `softprops/action-gh-release` 上传 `Setup.exe`
 - [ ] 5.2 推送一个 `v*` 测试 tag 验证 CI 产出 `Setup.exe`(**对外操作:发布 release,留给用户在确认后推送**)
+- [x] 5.3 发布前人工 checklist 已补充:版本号/tag、installer 冒烟、Chrome 环境、`임시저장` 边界、不得 `발급`/`제출`、产物 hash/记录
 
 ## 6. 退役与文档
 

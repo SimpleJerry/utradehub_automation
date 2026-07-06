@@ -142,7 +142,7 @@ npm run package
 node packaging/package.mjs --no-installer
 ```
 
-CI release 工作流从版本 tag 构建安装包；真实发布、tag 和外部放行仍属于人工门。
+CI release 工作流从版本 tag 构建安装包；真实发布、tag 和外部放行仍属于人工门，发布前按 [Release Checklist](./docs/RELEASE_CHECKLIST.md) 核对。
 
 ## 真实站点测试
 
