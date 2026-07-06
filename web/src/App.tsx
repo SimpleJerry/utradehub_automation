@@ -97,7 +97,12 @@ export function App() {
     setError("");
     try {
       const keys = groups.filter((g) => approved[g.groupKey]).map((g) => g.groupKey);
-      setReport(await run(sessionId, keys, credentials));
+      const result = await run(sessionId, keys, confirmed, credentials);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setReport(result);
       setPhase("report");
     } catch (e) {
       setError(String(e));

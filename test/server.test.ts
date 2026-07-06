@@ -1,4 +1,4 @@
-﻿import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -83,6 +83,7 @@ describe("HTTP API", () => {
       payload: {
         sessionId: previewBody.sessionId,
         approvedGroupKeys: previewBody.groups.map((g) => g.groupKey),
+        operatorConfirmed: true,
         credentials: { baseUrl: "https://x", username: "u", password: "p" },
       },
     });
@@ -119,6 +120,7 @@ describe("HTTP API", () => {
         payload: {
           sessionId: previewBody.sessionId,
           approvedGroupKeys: previewBody.groups.map((g) => g.groupKey),
+          operatorConfirmed: true,
           credentials: { baseUrl: "https://x", username: "u", password: "secret-password" },
         },
       });

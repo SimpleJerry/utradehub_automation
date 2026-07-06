@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.js";
-import { preview } from "./api.js";
+import { preview, run } from "./api.js";
 
 vi.mock("./api.js", () => ({
   preview: vi.fn(),
@@ -139,5 +139,86 @@ describe("App", () => {
     expect(droppedAlert?.textContent).toMatch(/quantity/);
     expect(droppedAlert?.textContent).toMatch(/unitPrice/);
     expect(droppedAlert?.textContent).toMatch(/以下行项目提交时会被跳过/);
+  });
+  it("passes operatorConfirmed true to run only after the confirmation checkbox is checked", async () => {
+    vi.mocked(preview).mockResolvedValueOnce({
+      sessionId: "s1",
+      groups: [
+        {
+          groupKey: "acme",
+          payToVendorNameEn: "Acme",
+          supplierNameKo: "에이씨엠이",
+          hsCode: "1234",
+          sourceFiles: ["po.pdf"],
+          lineItems: [
+            {
+              description: "WIDGET X",
+              quantity: 5,
+              unitPrice: 200,
+              docNumber: "PO-1",
+              documentDate: "2026-01-01",
+            },
+          ],
+          isValid: true,
+          missingFields: [],
+          droppedLineItems: [],
+        },
+      ],
+      extractionFailures: [],
+    });
+    vi.mocked(run).mockResolvedValueOnce({ outcomes: [], total: 0, succeeded: 0, failed: 0 });
+    render(<App />);
+    await runPreview();
+
+    const runButton = await screen.findByRole("button", { name: "确认并运行" });
+    expect((runButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /我已核对预览/ }));
+    expect((runButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(runButton);
+
+    await waitFor(() =>
+      expect(run).toHaveBeenCalledWith(
+        "s1",
+        ["acme"],
+        true,
+        expect.objectContaining({ loginMode: "manual" }),
+      ),
+    );
+  });
+
+  it("surfaces run API errors instead of rendering them as a report", async () => {
+    vi.mocked(preview).mockResolvedValueOnce({
+      sessionId: "s1",
+      groups: [
+        {
+          groupKey: "acme",
+          payToVendorNameEn: "Acme",
+          supplierNameKo: "에이씨엠이",
+          hsCode: "1234",
+          sourceFiles: ["po.pdf"],
+          lineItems: [
+            {
+              description: "WIDGET X",
+              quantity: 5,
+              unitPrice: 200,
+              docNumber: "PO-1",
+              documentDate: "2026-01-01",
+            },
+          ],
+          isValid: true,
+          missingFields: [],
+          droppedLineItems: [],
+        },
+      ],
+      extractionFailures: [],
+    });
+    vi.mocked(run).mockResolvedValueOnce({ error: "unknown_approved_group_keys" });
+    render(<App />);
+    await runPreview();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /我已核对预览/ }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并运行" }));
+
+    expect(await screen.findByText("unknown_approved_group_keys")).toBeTruthy();
+    expect(screen.queryByText(/3\. 运行结果/)).toBeNull();
   });
 });

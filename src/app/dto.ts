@@ -43,9 +43,22 @@ export interface GroupOutcome {
   message: string;
 }
 
+export interface ApiError {
+  error: string;
+  unknownGroupKeys?: string[];
+}
+
+export interface RunRequest {
+  sessionId: string;
+  approvedGroupKeys: string[];
+  operatorConfirmed: boolean;
+}
+
 export interface BatchReport {
   outcomes: GroupOutcome[];
   total: number;
   succeeded: number;
   failed: number;
 }
+
+export type RunResponse = BatchReport | ApiError;

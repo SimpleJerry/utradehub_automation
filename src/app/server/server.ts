@@ -4,19 +4,13 @@ import type { SupplierGroup } from "../../core/model.js";
 import type { SiteCredentials } from "../../ports/browser-driver.js";
 import { previewBatch, submitBatch, type PdfInput, type PreviewPorts } from "../orchestrator.js";
 import { summarizeSupplierGroup, writeDiagnosticFile } from "../diagnostics.js";
-import type { LlmRequestConfig } from "../dto.js";
+import type { LlmRequestConfig, RunRequest } from "../dto.js";
 import type { ServerDeps } from "./deps.js";
 
 interface PreviewBody {
   mappingCsv: string;
   pdfs: { sourceFile: string; base64: string }[];
   llm: LlmRequestConfig;
-}
-
-interface RunBody {
-  sessionId: string;
-  approvedGroupKeys: string[];
-  credentials: SiteCredentials;
 }
 
 /** Build the local HTTP API. Dependencies are injected so tests use fakes (no browser/network). */
@@ -55,14 +49,23 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   });
 
   app.post("/api/run", async (request) => {
-    const body = request.body as RunBody;
+    const body = request.body as RunRequest & { credentials: SiteCredentials };
+    if (body.operatorConfirmed !== true) return { error: "operator_confirmation_required" };
+
     const groups = sessions.get(body.sessionId);
     if (!groups) return { error: "session_not_found" };
 
-    const approved = groups.filter((g) => body.approvedGroupKeys.includes(g.groupKey));
+    const approvedGroupKeys = Array.isArray(body.approvedGroupKeys) ? body.approvedGroupKeys : [];
+    const knownGroupKeys = new Set(groups.map((g) => g.groupKey));
+    const unknownGroupKeys = approvedGroupKeys.filter((key) => !knownGroupKeys.has(key));
+    if (unknownGroupKeys.length > 0) {
+      return { error: "unknown_approved_group_keys", unknownGroupKeys };
+    }
+
+    const approved = groups.filter((g) => approvedGroupKeys.includes(g.groupKey));
     await writeDiagnosticFile("ui_run_approved_groups", {
       sessionId: body.sessionId,
-      approvedGroupKeys: body.approvedGroupKeys,
+      approvedGroupKeys,
       groups: approved.map(summarizeSupplierGroup),
     }).catch(() => undefined);
     return submitBatch(approved, body.credentials, deps.driver);
@@ -70,4 +73,3 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
   return app;
 }
-

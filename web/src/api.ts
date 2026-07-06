@@ -48,12 +48,19 @@ export interface GroupOutcome {
   message: string;
 }
 
+export interface ApiError {
+  error: string;
+  unknownGroupKeys?: string[];
+}
+
 export interface BatchReport {
   outcomes: GroupOutcome[];
   total: number;
   succeeded: number;
   failed: number;
 }
+
+export type RunResponse = BatchReport | ApiError;
 
 export interface Credentials {
   baseUrl: string;
@@ -101,7 +108,13 @@ export function preview(
 export function run(
   sessionId: string,
   approvedGroupKeys: string[],
+  operatorConfirmed: boolean,
   credentials: Credentials,
-): Promise<BatchReport> {
-  return postJson<BatchReport>("/api/run", { sessionId, approvedGroupKeys, credentials });
+): Promise<RunResponse> {
+  return postJson<RunResponse>("/api/run", {
+    sessionId,
+    approvedGroupKeys,
+    operatorConfirmed,
+    credentials,
+  });
 }
