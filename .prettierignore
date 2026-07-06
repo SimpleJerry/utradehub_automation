@@ -31,6 +31,7 @@ README.ko.md
 README_USER.md
 README_USER.en.md
 README_USER.ko.md
+*.csv
 
 # ruler generated/local agent files
 AGENTS.md

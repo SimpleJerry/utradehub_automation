@@ -1,0 +1,31 @@
+{
+  "groups": [
+    {
+      "groupKey": "acme medical co ltd",
+      "payToVendorNameEn": "ACME MEDICAL CO LTD",
+      "supplierNameKo": "에이씨엠이메디컬",
+      "hsCode": "901890",
+      "sourceFiles": ["sample-po-redacted.pdf"],
+      "lineItems": [
+        {
+          "description": "REDACTED DEMO ITEM A",
+          "quantity": 10,
+          "unitPrice": 25.5,
+          "docNumber": "BPO-DEMO-001",
+          "documentDate": "2026-01-15"
+        },
+        {
+          "description": "REDACTED DEMO ITEM B",
+          "quantity": 2,
+          "unitPrice": 100,
+          "docNumber": "BPO-DEMO-001",
+          "documentDate": "2026-01-15"
+        }
+      ],
+      "isValid": true,
+      "missingFields": [],
+      "droppedLineItems": []
+    }
+  ],
+  "extractionFailures": []
+}
